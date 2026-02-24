@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { defaultSupervisors, defaultServices } from './data';
+import HRSection from './components/HRSection';
 import './index.css';
 
 function App() {
@@ -7,254 +9,367 @@ function App() {
   const [supervisors, setSupervisors] = useState([]);
   const [services, setServices] = useState([]);
   const [visitedServices, setVisitedServices] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([
+    { id: 1, nombre: 'DNI', requiere_vencimiento: false, dias_alerta: 30, obligatorio: true },
+    { id: 2, nombre: 'CUIL/CUIT', requiere_vencimiento: false, dias_alerta: 30, obligatorio: true },
+    { id: 3, nombre: 'Alta Temprana', requiere_vencimiento: false, dias_alerta: 30, obligatorio: true },
+    { id: 4, nombre: 'Apto Médico', requiere_vencimiento: true, dias_alerta: 30, obligatorio: true },
+    { id: 5, nombre: 'ART', requiere_vencimiento: true, dias_alerta: 15, obligatorio: true },
+    { id: 6, nombre: 'Constancia Domicilio', requiere_vencimiento: false, dias_alerta: 30, obligatorio: false },
+  ]);
+  const [employeeDocuments, setEmployeeDocuments] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
 
-  // App State
+  // UI State
+  const [view, setView] = useState('dashboard'); // 'dashboard', 'visitas', 'rrhh', 'periodo-prueba', 'config'
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showConfig, setShowConfig] = useState(null); // 'supervisors', 'services', or null
-  const [showVisitForm, setShowVisitForm] = useState(null); // service object or null
+  const [showConfigModal, setShowConfigModal] = useState(null); // 'supervisors', 'services'
+  const [showVisitForm, setShowVisitForm] = useState(null);
   const [suppliesNote, setSuppliesNote] = useState('');
 
-  // Load data from localStorage on mount
+  // Load / Save Data
   useEffect(() => {
-    const savedSupervisors = localStorage.getItem('app-supervisors');
-    const savedServices = localStorage.getItem('app-services');
-    const savedVisits = localStorage.getItem('app-visits');
+    const savedData = {
+      supervisors: localStorage.getItem('app-supervisors'),
+      services: localStorage.getItem('app-services'),
+      visits: localStorage.getItem('app-visits'),
+      employees: localStorage.getItem('app-employees'),
+      docTypes: localStorage.getItem('app-doc-types'),
+      empDocs: localStorage.getItem('app-emp-docs'),
+      audits: localStorage.getItem('app-audits'),
+    };
 
-    setSupervisors(savedSupervisors ? JSON.parse(savedSupervisors) : defaultSupervisors);
-    setServices(savedServices ? JSON.parse(savedServices) : defaultServices);
-    setVisitedServices(savedVisits ? JSON.parse(savedVisits) : []);
+    setSupervisors(savedData.supervisors ? JSON.parse(savedData.supervisors) : defaultSupervisors);
+    setServices(savedData.services ? JSON.parse(savedData.services) : defaultServices);
+    setVisitedServices(savedData.visits ? JSON.parse(savedData.visits) : []);
+    setEmployees(savedData.employees ? JSON.parse(savedData.employees) : []);
+    if (savedData.docTypes) setDocumentTypes(JSON.parse(savedData.docTypes));
+    setEmployeeDocuments(savedData.empDocs ? JSON.parse(savedData.empDocs) : []);
+    setAuditLogs(savedData.audits ? JSON.parse(savedData.audits) : []);
   }, []);
 
-  // Sync data to localStorage
   useEffect(() => { localStorage.setItem('app-supervisors', JSON.stringify(supervisors)); }, [supervisors]);
   useEffect(() => { localStorage.setItem('app-services', JSON.stringify(services)); }, [services]);
   useEffect(() => { localStorage.setItem('app-visits', JSON.stringify(visitedServices)); }, [visitedServices]);
+  useEffect(() => { localStorage.setItem('app-employees', JSON.stringify(employees)); }, [employees]);
+  useEffect(() => { localStorage.setItem('app-doc-types', JSON.stringify(documentTypes)); }, [documentTypes]);
+  useEffect(() => { localStorage.setItem('app-emp-docs', JSON.stringify(employeeDocuments)); }, [employeeDocuments]);
+  useEffect(() => { localStorage.setItem('app-audits', JSON.stringify(auditLogs)); }, [auditLogs]);
 
-  const handleVisitSubmit = (e) => {
-    e.preventDefault();
-    if (!suppliesNote.trim()) {
-      alert('Por favor, indica los insumos necesarios.');
-      return;
-    }
+  // Fix: Excel Export with Blob for better compatibility
+  const exportTrialPeriodsToExcel = () => {
+    const activeEmployees = employees.filter(e => e.estado_empleado === 'Activo');
+    const sorted = [...activeEmployees].sort((a, b) => new Date(a.fecha_fin_prueba) - new Date(b.fecha_fin_prueba));
 
-    const newVisit = {
-      serviceId: showVisitForm.id,
-      supervisorId: selectedSupervisor.id,
-      timestamp: new Date().toISOString(),
-      supplies: suppliesNote,
-    };
+    const data = sorted.map(emp => {
+      const hoy = new Date();
+      const vto = new Date(emp.fecha_fin_prueba);
+      const diffDays = Math.ceil((vto - hoy) / (1000 * 60 * 60 * 24));
 
-    setVisitedServices([...visitedServices, newVisit]);
-    setShowVisitForm(null);
-    setSuppliesNote('');
-  };
+      let status = 'En Curso';
+      if (diffDays < 0) status = 'Vencido';
+      else if (diffDays <= 15) status = 'Próximo a Vencer';
 
-  const isVisited = (serviceId) => visitedServices.some(v => v.serviceId === serviceId);
-
-  const filteredServices = services.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const progress = Math.round((visitedServices.length / services.length) * 100);
-
-  // Configuration Handlers
-  const addService = () => {
-    const name = prompt('Nombre del nuevo servicio:');
-    const address = prompt('Dirección del nuevo servicio:');
-    if (name && address) {
-      const newService = {
-        id: Math.max(0, ...services.map(s => s.id)) + 1,
-        name,
-        address
+      return {
+        'Legajo': emp.legajo,
+        'Apellido': emp.apellido,
+        'Nombre': emp.nombre,
+        'DNI': emp.dni,
+        'CUIL': emp.cuil,
+        'Servicio': services.find(s => s.id === parseInt(emp.servicio_id))?.name || '---',
+        'Fecha Ingreso': emp.fecha_ingreso,
+        'Vencimiento Prueba': emp.fecha_fin_prueba,
+        'Días Restantes': diffDays,
+        'Estado': status
       };
-      setServices([...services, newService]);
-    }
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vencimientos");
+
+    // Using writeFile direct method from xlsx
+    XLSX.writeFile(workbook, `Reporte_Prueba_LASIA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const editService = (id) => {
-    const service = services.find(s => s.id === id);
-    const name = prompt('Nuevo nombre:', service.name);
-    const address = prompt('Nueva dirección:', service.address);
-    if (name && address) {
-      setServices(services.map(s => s.id === id ? { ...s, name, address } : s));
-    }
-  };
+  // Metrics logic
+  const activeEmpCount = employees.filter(e => e.estado_empleado === 'Activo').length;
+  const criticalCount = employees.filter(emp => {
+    const mandatoryTypes = documentTypes.filter(t => t.obligatorio);
+    return mandatoryTypes.some(type => {
+      const doc = employeeDocuments.find(d => d.empleado_id === emp.id && d.documento_tipo_id === type.id);
+      if (!doc) return true; // Missing
+      if (!type.requiere_vencimiento) return false;
+      return new Date(doc.fecha_vencimiento) < new Date(); // Vencido
+    });
+  }).length;
+  const expiringTrialCount = employees.filter(e => {
+    if (e.estado_empleado !== 'Activo') return false;
+    const diff = (new Date(e.fecha_fin_prueba) - new Date()) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 15;
+  }).length;
 
-  const editSupervisor = (id) => {
-    const supervisor = supervisors.find(s => s.id === id);
-    const name = prompt('Nuevo nombre:', supervisor.name);
-    const surname = prompt('Nuevo apellido:', supervisor.surname);
-    if (name && surname) {
-      setSupervisors(supervisors.map(s => s.id === id ? { ...s, name, surname } : s));
-    }
-  };
-
-  const addSupervisor = () => {
-    const name = prompt('Nombre del nuevo supervisor:');
-    const surname = prompt('Apellido del nuevo supervisor:');
-    if (name && surname) {
-      const newSupervisor = {
-        id: Math.max(0, ...supervisors.map(s => s.id)) + 1,
-        name,
-        surname
-      };
-      setSupervisors([...supervisors, newSupervisor]);
-    }
-  };
-
-  if (!selectedSupervisor) {
-    return (
-      <div className="container">
-        <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
-          <h1>Control de Visitas</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Selecciona tu perfil o administra el sistema</p>
-          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
-            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setShowConfig('supervisors')}>⚙ Supervisores</button>
-            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setShowConfig('services')}>⚙ Servicios</button>
-          </div>
-        </header>
-
-        <div className="grid">
-          {supervisors.map(s => (
-            <button key={s.id} className="card btn btn-primary" onClick={() => setSelectedSupervisor(s)} style={{ textAlign: 'left', cursor: 'pointer' }}>
-              <h3>{s.name} {s.surname}</h3>
-              <p>Supervisor de Servicios</p>
-            </button>
-          ))}
+  const renderDashboard = () => (
+    <div className="dashboard-view">
+      <header className="flex-between" style={{ marginBottom: '2rem' }}>
+        <div>
+          <h1>Dashboard Holístico</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Bienvenido al panel central de LASIA</p>
         </div>
-
-        {/* Configuration Modals */}
-        {showConfig === 'supervisors' && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <div className="flex-between">
-                <h2>Administrar Supervisores</h2>
-                <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setShowConfig(null)}>✕</button>
-              </div>
-              <button className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={addSupervisor}>+ Agregar Nuevo Supervisor</button>
-              <div className="mgmt-list">
-                {supervisors.map(s => (
-                  <div key={s.id} className="mgmt-item">
-                    <span>{s.name} {s.surname}</span>
-                    <button className="btn btn-primary" style={{ width: 'auto', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }} onClick={() => editSupervisor(s.id)}>Editar</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showConfig === 'services' && (
-          <div className="modal-overlay">
-            <div className="modal-content">
-              <div className="flex-between">
-                <h2>Administrar Servicios</h2>
-                <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => setShowConfig(null)}>✕</button>
-              </div>
-              <button className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={addService}>+ Agregar Nuevo Servicio</button>
-              <div className="mgmt-list">
-                {services.map(s => (
-                  <div key={s.id} className="mgmt-item">
-                    <div style={{ overflow: 'hidden' }}>
-                      <div style={{ fontWeight: '600' }}>{s.name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{s.address}</div>
-                    </div>
-                    <button className="btn btn-primary" style={{ width: 'auto', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }} onClick={() => editService(s.id)}>Editar</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="container">
-      <header style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1>Panel de Visitas</h1>
-          <button className="btn" style={{ width: 'auto', padding: '0.5rem 1rem' }} onClick={() => setSelectedSupervisor(null)}>
-            Salir ({selectedSupervisor.name})
-          </button>
-        </div>
-
-        <div className="card" style={{ marginTop: '1rem', background: '#f1f5f9' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <span style={{ fontWeight: '600' }}>Progreso Semanal</span>
-            <span>{visitedServices.length} / {services.length} ({progress}%)</span>
-          </div>
-          <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${progress}%`, height: '100%', background: 'var(--success)', transition: 'width 0.3s ease' }}></div>
-          </div>
-        </div>
-
-        <input
-          type="text"
-          placeholder="Buscar servicio por nombre o dirección..."
-          className="card"
-          style={{ width: '100%', padding: '1rem', marginTop: '1rem' }}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
       </header>
 
-      <div className="grid">
-        {filteredServices.map(service => {
-          const visited = isVisited(service.id);
-          const vInfo = visited ? visitedServices.find(v => v.serviceId === service.id) : null;
-          const sName = vInfo ? supervisors.find(s => s.id === vInfo.supervisorId)?.name : '';
-
-          return (
-            <div key={service.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ fontSize: '1.1rem' }}>{service.name}</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{service.address}</p>
-                {visited && (
-                  <p style={{ color: 'var(--success)', fontSize: '0.8rem', fontWeight: '600', marginTop: '0.25rem' }}>
-                    ✔ Visitado: {vInfo.supplies.substring(0, 30)}...
-                  </p>
-                )}
-              </div>
-              <div>
-                {visited ? (
-                  <span className="badge badge-success">Completado</span>
-                ) : (
-                  <button className="btn btn-primary" style={{ padding: '0.5rem 1rem' }} onClick={() => setShowVisitForm(service)}>
-                    Registrar
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+      <div className="metrics-grid">
+        <div className="metric-card">
+          <label>Personal Activo</label>
+          <div className="value">{activeEmpCount}</div>
+          <div className="trend up">▲ +12 este mes</div>
+        </div>
+        <div className="metric-card">
+          <label>Legajos Críticos</label>
+          <div className="value" style={{ color: 'var(--error)' }}>{criticalCount}</div>
+          <div className="trend down">▼ Revisión urgente</div>
+        </div>
+        <div className="metric-card">
+          <label>Vtos. Prueba (15d)</label>
+          <div className="value" style={{ color: 'var(--warning)' }}>{expiringTrialCount}</div>
+          <div className="trend up">🟡 Pendientes</div>
+        </div>
+        <div className="metric-card">
+          <label>Docs Pendientes</label>
+          <div className="value">14</div>
+          <div className="trend down">🔴 -3 hoy</div>
+        </div>
       </div>
 
-      {/* Visit Form Modal */}
+      <div className="grid" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+        <div className="card">
+          <div className="flex-between">
+            <h3>Estadísticas RRHH</h3>
+            <button className="btn btn-secondary">Config</button>
+          </div>
+          <div className="graph-placeholder">
+            Gráfico de Tendencias RRHH (Próximamente)
+          </div>
+        </div>
+        <div className="card">
+          <h3>Vencimientos próximos</h3>
+          <div className="table-container" style={{ marginTop: '1rem' }}>
+            <table style={{ fontSize: '0.8rem' }}>
+              <tbody>
+                {employees.filter(e => e.estado_empleado === 'Activo').slice(0, 5).map(emp => (
+                  <tr key={emp.id}>
+                    <td><strong>{emp.apellido}, {emp.nombre}</strong></td>
+                    <td><span className="badge badge-warning">Prueba</span></td>
+                    <td style={{ textAlign: 'right' }}>{emp.fecha_fin_prueba}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderVisitas = () => (
+    <div className="visitas-view">
+      {!selectedSupervisor ? (
+        <>
+          <header className="flex-between" style={{ marginBottom: '2rem' }}>
+            <div>
+              <h1>Panel de Supervisores</h1>
+              <p style={{ color: 'var(--text-muted)' }}>Selecciona un supervisor para registrar visitas</p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowConfigModal('supervisors')}>Admin Supervisores</button>
+              <button className="btn btn-secondary" onClick={() => setShowConfigModal('services')}>Admin Servicios</button>
+            </div>
+          </header>
+          <div className="grid">
+            {supervisors.map(s => (
+              <div key={s.id} className="card clickable-row" onClick={() => setSelectedSupervisor(s)}>
+                <h3>{s.name} {s.surname}</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Supervisor de Servicios</p>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <header className="flex-between" style={{ marginBottom: '2rem' }}>
+            <div>
+              <button className="btn btn-secondary" onClick={() => setSelectedSupervisor(null)} style={{ marginBottom: '0.5rem' }}>← Cambiar</button>
+              <h1>{selectedSupervisor.name} {selectedSupervisor.surname}</h1>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar servicio..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="card" style={{ marginBottom: 0, padding: '0.5rem 1rem', width: '250px' }}
+            />
+          </header>
+          <div className="grid">
+            {services.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map(service => {
+              const visit = visitedServices.find(v => v.serviceId === service.id && v.supervisorId === selectedSupervisor.id);
+              return (
+                <div key={service.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h4>{service.name}</h4>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{service.address}</p>
+                    {visit && <span className="badge badge-success">✔ Visitado</span>}
+                  </div>
+                  <button className="btn btn-primary" onClick={() => setShowVisitForm(service)}>
+                    {visit ? 'Revisar' : 'Registrar'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderPeriodoPrueba = () => {
+    const activeEmployees = employees.filter(e => e.estado_empleado === 'Activo');
+    const sorted = [...activeEmployees].sort((a, b) => new Date(a.fecha_fin_prueba) - new Date(b.fecha_fin_prueba));
+
+    return (
+      <div className="periodo-prueba-view">
+        <header className="flex-between" style={{ marginBottom: '2rem' }}>
+          <div>
+            <h1>Control de Períodos de Prueba</h1>
+            <p style={{ color: 'var(--text-muted)' }}>Gestión de estabilidad laboral (6 meses)</p>
+          </div>
+          <button className="btn btn-primary" onClick={exportTrialPeriodsToExcel}>📥 Descargar Informe Excel</button>
+        </header>
+
+        <div className="card" style={{ padding: 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Empleado</th>
+                <th>Legajo</th>
+                <th>Fecha Ingreso</th>
+                <th>Vencimiento</th>
+                <th>Estado</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(emp => {
+                const hoy = new Date();
+                const vto = new Date(emp.fecha_fin_prueba);
+                const diff = Math.ceil((vto - hoy) / (1000 * 60 * 60 * 24));
+                const status = diff < 0 ? 'badge-danger' : diff <= 15 ? 'badge-warning' : 'badge-success';
+                const label = diff < 0 ? 'Vencido' : diff <= 15 ? 'Por Vencer' : 'Vigente';
+
+                return (
+                  <tr key={emp.id}>
+                    <td><strong>{emp.apellido}, {emp.nombre}</strong></td>
+                    <td>{emp.legajo}</td>
+                    <td>{emp.fecha_ingreso}</td>
+                    <td><strong>{emp.fecha_fin_prueba}</strong></td>
+                    <td><span className={`badge ${status}`}>{label}</span></td>
+                    <td><button className="btn btn-secondary" onClick={() => { setView('rrhh'); }}>Ver</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="app-wrapper">
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          LASIA <span>LIMPIEZA</span>
+        </div>
+        <nav className="sidebar-menu">
+          <div className={`menu-item ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
+            🏠 Dashboard
+          </div>
+          <div className={`menu-item ${view === 'rrhh' ? 'active' : ''}`} onClick={() => setView('rrhh')}>
+            👥 Personal
+          </div>
+          <div className={`menu-item ${view === 'periodo-prueba' ? 'active' : ''}`} onClick={() => setView('periodo-prueba')}>
+            ⏳ Periodos Prueba
+          </div>
+          <div className={`menu-item ${view === 'visitas' ? 'active' : ''}`} onClick={() => setView('visitas')}>
+            📋 Supervisores
+          </div>
+          <div className={`menu-item ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>
+            ⚙ Configuración
+          </div>
+        </nav>
+        <div style={{ padding: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
+          Digitalización Integral
+        </div>
+      </aside>
+
+      <main className="main-container">
+        <div className="content-area">
+          {view === 'dashboard' && renderDashboard()}
+          {view === 'rrhh' && (
+            <HRSection
+              employees={employees}
+              setEmployees={setEmployees}
+              services={services}
+              documentTypes={documentTypes}
+              setDocumentTypes={setDocumentTypes}
+              employeeDocuments={employeeDocuments}
+              setEmployeeDocuments={setEmployeeDocuments}
+              auditLogs={auditLogs}
+              setAuditLogs={setAuditLogs}
+              supervisors={supervisors}
+            />
+          )}
+          {view === 'periodo-prueba' && renderPeriodoPrueba()}
+          {view === 'visitas' && renderVisitas()}
+          {view === 'config' && <div className="card"><h3>Página de configuración próximamente...</h3></div>}
+        </div>
+      </main>
+
+      {/* Basic Admin Modals */}
+      {showConfigModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <header className="flex-between">
+              <h2>Configuración</h2>
+              <button className="btn btn-secondary" onClick={() => setShowConfigModal(null)}>✕</button>
+            </header>
+            <p style={{ marginTop: '1rem' }}>Función de edición rápida disponible próximamente.</p>
+          </div>
+        </div>
+      )}
+
       {showVisitForm && (
         <div className="modal-overlay">
-          <form className="modal-content" onSubmit={handleVisitSubmit}>
+          <div className="modal-content">
             <h2>Registro de Visita</h2>
-            <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>{showVisitForm.name}</p>
-
-            <div className="form-group">
-              <label>Insumos de limpieza necesarios para la semana:</label>
-              <textarea
-                required
-                placeholder="Ej: 5L Desinfectante, 2 paquetes de bolsas, etc..."
-                value={suppliesNote}
-                onChange={(e) => setSuppliesNote(e.target.value)}
-              />
+            <p>{showVisitForm.name}</p>
+            <textarea
+              placeholder="Insumos necesarios..."
+              value={suppliesNote}
+              onChange={e => setSuppliesNote(e.target.value)}
+              className="card" style={{ width: '100%', marginTop: '1rem' }}
+            />
+            <div className="flex-between" style={{ marginTop: '1rem' }}>
+              <button className="btn btn-secondary" onClick={() => setShowVisitForm(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={() => {
+                const newVisit = { serviceId: showVisitForm.id, supervisorId: selectedSupervisor.id, timestamp: new Date().toISOString(), supplies: suppliesNote };
+                setVisitedServices([...visitedServices, newVisit]);
+                setShowVisitForm(null);
+                setSuppliesNote('');
+              }}>Guardar</button>
             </div>
-
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowVisitForm(null); setSuppliesNote(''); }}>Cancelar</button>
-              <button type="submit" className="btn btn-primary">Guardar Visita</button>
-            </div>
-          </form>
+          </div>
         </div>
       )}
     </div>
