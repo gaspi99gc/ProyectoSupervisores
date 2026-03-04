@@ -20,9 +20,10 @@ function App() {
   ]);
   const [employeeDocuments, setEmployeeDocuments] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null); // { id, name, surname, dni, role: 'admin' | 'supervisor' }
 
   // UI State
-  const [view, setView] = useState('dashboard'); // 'dashboard', 'visitas', 'rrhh', 'periodo-prueba', 'config'
+  const [view, setView] = useState('dashboard'); // 'dashboard', 'visitas', 'rrhh', 'periodo-prueba', 'config', 'login'
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showConfigModal, setShowConfigModal] = useState(null); // 'supervisors', 'services'
@@ -39,6 +40,7 @@ function App() {
       docTypes: localStorage.getItem('app-doc-types'),
       empDocs: localStorage.getItem('app-emp-docs'),
       audits: localStorage.getItem('app-audits'),
+      user: localStorage.getItem('app-current-user'),
     };
 
     setSupervisors(savedData.supervisors ? JSON.parse(savedData.supervisors) : defaultSupervisors);
@@ -48,6 +50,12 @@ function App() {
     if (savedData.docTypes) setDocumentTypes(JSON.parse(savedData.docTypes));
     setEmployeeDocuments(savedData.empDocs ? JSON.parse(savedData.empDocs) : []);
     setAuditLogs(savedData.audits ? JSON.parse(savedData.audits) : []);
+
+    if (savedData.user) {
+      setCurrentUser(JSON.parse(savedData.user));
+    } else {
+      setView('login');
+    }
   }, []);
 
   useEffect(() => { localStorage.setItem('app-supervisors', JSON.stringify(supervisors)); }, [supervisors]);
@@ -57,6 +65,68 @@ function App() {
   useEffect(() => { localStorage.setItem('app-doc-types', JSON.stringify(documentTypes)); }, [documentTypes]);
   useEffect(() => { localStorage.setItem('app-emp-docs', JSON.stringify(employeeDocuments)); }, [employeeDocuments]);
   useEffect(() => { localStorage.setItem('app-audits', JSON.stringify(auditLogs)); }, [auditLogs]);
+  useEffect(() => {
+    if (currentUser) localStorage.setItem('app-current-user', JSON.stringify(currentUser));
+    else localStorage.removeItem('app-current-user');
+  }, [currentUser]);
+
+  const handleLogin = (dni) => {
+    // Admin Shortcut (for development/owner)
+    if (dni === 'admin') {
+      const adminUser = { id: 0, name: 'Admin', surname: 'LASIA', dni: 'admin', role: 'admin' };
+      setCurrentUser(adminUser);
+      setView('dashboard');
+      return true;
+    }
+
+    const supervisor = supervisors.find(s => s.dni === dni);
+    if (supervisor) {
+      const user = { ...supervisor, role: 'supervisor' };
+      setCurrentUser(user);
+      setView('visitas');
+      setSelectedSupervisor(user); // Set as selected for the current view logic
+      return true;
+    }
+    return false;
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setView('login');
+    setSelectedSupervisor(null);
+  };
+
+  // Supervisor Management
+  const addSupervisor = (sup) => {
+    const newSup = { ...sup, id: Date.now() };
+    setSupervisors([...supervisors, newSup]);
+  };
+
+  const updateSupervisor = (id, updatedSup) => {
+    setSupervisors(supervisors.map(s => s.id === id ? { ...s, ...updatedSup } : s));
+  };
+
+  const deleteSupervisor = (id) => {
+    if (confirm('¿Estás seguro de eliminar a este supervisor?')) {
+      setSupervisors(supervisors.filter(s => s.id !== id));
+    }
+  };
+
+  // Service Management
+  const addService = (serv) => {
+    const newServ = { ...serv, id: Date.now() };
+    setServices([...services, newServ]);
+  };
+
+  const updateService = (id, updatedServ) => {
+    setServices(services.map(s => s.id === id ? { ...s, ...updatedServ } : s));
+  };
+
+  const deleteService = (id) => {
+    if (confirm('¿Estás seguro de eliminar este servicio?')) {
+      setServices(services.filter(s => s.id !== id));
+    }
+  };
 
   // Fix: Excel Export with Blob for better compatibility
   const exportTrialPeriodsToExcel = () => {
@@ -94,7 +164,55 @@ function App() {
     XLSX.writeFile(workbook, `Reporte_Prueba_LASIA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Metrics logic
+  // Distance helper (Haversine formula)
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) *
+      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // in metres
+  };
+
+  const renderLogin = () => {
+    const [dniInput, setDniInput] = useState('');
+    const [error, setError] = useState(null);
+
+    return (
+      <div className="modal-overlay login-overlay">
+        <div className="modal-content login-card" style={{ textAlign: 'center' }}>
+          <div className="sidebar-logo" style={{ border: 'none', justifyContent: 'center', marginBottom: '1rem', color: 'var(--secondary)' }}>
+            LASIA <span>LIMPIEZA</span>
+          </div>
+          <h2>Acceso al Sistema</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Ingrese su DNI para continuar</p>
+          <input
+            type="text"
+            placeholder="Introduce tu DNI"
+            className="card"
+            style={{ width: '100%', padding: '1rem', textAlign: 'center', fontSize: '1.2rem', marginBottom: '1rem' }}
+            value={dniInput}
+            onChange={(e) => setDniInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (handleLogin(dniInput) || setError('DNI incorrecto'))}
+          />
+          {error && <p style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</p>}
+          <button
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '1rem' }}
+            onClick={() => handleLogin(dniInput) || setError('DNI incorrecto')}
+          >
+            Entrar
+          </button>
+        </div>
+      </div>
+    );
+  };
   const activeEmpCount = employees.filter(e => e.estado_empleado === 'Activo').length;
   const criticalCount = employees.filter(emp => {
     const mandatoryTypes = documentTypes.filter(t => t.obligatorio);
@@ -233,6 +351,69 @@ function App() {
     </div>
   );
 
+  const renderSupervisorDashboard = () => (
+    <div className="visitas-view">
+      <header className="flex-between" style={{ marginBottom: '2rem' }}>
+        <div>
+          <h1>Hola, {currentUser.name}</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Registra tu asistencia en los servicios</p>
+        </div>
+      </header>
+
+      <div className="grid">
+        {services.map(service => {
+          const attendance = visitedServices.filter(v => v.serviceId === service.id && v.supervisorId === currentUser.id);
+          const lastEvent = attendance.length > 0 ? attendance[attendance.length - 1] : null;
+          const isCheckedIn = lastEvent && lastEvent.type === 'check-in';
+
+          return (
+            <div key={service.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <h4>{service.name}</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{service.address}</p>
+              </div>
+
+              <div className="flex-between">
+                <div>
+                  {isCheckedIn ?
+                    <span className="badge badge-success">● En servicio</span> :
+                    <span className="badge badge-secondary">○ Fuera</span>
+                  }
+                </div>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const type = isCheckedIn ? 'check-out' : 'check-in';
+                    navigator.geolocation.getCurrentPosition((pos) => {
+                      const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, service.lat, service.lng);
+                      const isNear = dist < 200; // 200 meters threshold
+
+                      const event = {
+                        id: Date.now(),
+                        serviceId: service.id,
+                        supervisorId: currentUser.id,
+                        timestamp: new Date().toISOString(),
+                        type: type,
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        verified: isNear
+                      };
+
+                      if (!isNear && !confirm(`Estás a ${Math.round(dist)}m del servicio. ¿Deseas fichar de todos modos?`)) return;
+
+                      setVisitedServices([...visitedServices, event]);
+                    }, (err) => alert("Error al obtener ubicación: " + err.message));
+                  }}
+                >
+                  {isCheckedIn ? 'Marcar Salida' : 'Marcar Entrada'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
   const renderPeriodoPrueba = () => {
     const activeEmployees = employees.filter(e => e.estado_empleado === 'Activo');
     const sorted = [...activeEmployees].sort((a, b) => new Date(a.fecha_fin_prueba) - new Date(b.fecha_fin_prueba));
@@ -285,6 +466,174 @@ function App() {
     );
   };
 
+  const renderConfig = () => {
+    const [configTab, setConfigTab] = useState('supervisors'); // 'supervisors', 'services'
+    const [editingEntity, setEditingEntity] = useState(null); // { type, data }
+
+    const [formData, setFormData] = useState({});
+
+    const openModal = (type, data = null) => {
+      setEditingEntity({ type, data });
+      setFormData(data || (type === 'supervisor' ? { name: '', surname: '', dni: '' } : { name: '', address: '', lat: '', lng: '' }));
+    };
+
+    return (
+      <div className="config-view">
+        <header className="flex-between" style={{ marginBottom: '2rem' }}>
+          <div>
+            <h1>Configuración del Systema</h1>
+            <p style={{ color: 'var(--text-muted)' }}>Gestión de recursos y acceso</p>
+          </div>
+          <div className="tabs" style={{ display: 'flex', gap: '1rem', background: '#eee', padding: '0.4rem', borderRadius: '12px' }}>
+            <button
+              className={`btn ${configTab === 'supervisors' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setConfigTab('supervisors')}
+              style={{ boxShadow: configTab === 'supervisors' ? '' : 'none' }}
+            >
+              Supervisores
+            </button>
+            <button
+              className={`btn ${configTab === 'services' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setConfigTab('services')}
+              style={{ boxShadow: configTab === 'services' ? '' : 'none' }}
+            >
+              Servicios
+            </button>
+          </div>
+        </header>
+
+        {configTab === 'supervisors' ? (
+          <div className="card" style={{ padding: 0 }}>
+            <div className="flex-between" style={{ padding: '1.5rem' }}>
+              <h3>Lista de Supervisores</h3>
+              <button className="btn btn-primary" onClick={() => openModal('supervisor')}>+ Añadir Supervisor</button>
+            </div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Nombre completo</th>
+                  <th>DNI (Acceso)</th>
+                  <th style={{ textAlign: 'right' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supervisors.map(s => (
+                  <tr key={s.id}>
+                    <td><strong>{s.surname}, {s.name}</strong></td>
+                    <td>{s.dni}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-secondary" style={{ marginRight: '0.5rem' }} onClick={() => openModal('supervisor', s)}>✏️</button>
+                      <button className="btn btn-secondary" style={{ color: 'var(--error)' }} onClick={() => deleteSupervisor(s.id)}>🗑️</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 0 }}>
+            <div className="flex-between" style={{ padding: '1.5rem' }}>
+              <h3>Lista de Servicios</h3>
+              <button className="btn btn-primary" onClick={() => openModal('service')}>+ Añadir Servicio</button>
+            </div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Servicio</th>
+                  <th>Ubicación</th>
+                  <th>Coordenadas</th>
+                  <th style={{ textAlign: 'right' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {services.map(s => (
+                  <tr key={s.id}>
+                    <td><strong>{s.name}</strong></td>
+                    <td>{s.address}</td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {s.lat?.toFixed(4)}, {s.lng?.toFixed(4)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-secondary" style={{ marginRight: '0.5rem' }} onClick={() => openModal('service', s)}>✏️</button>
+                      <button className="btn btn-secondary" style={{ color: 'var(--error)' }} onClick={() => deleteService(s.id)}>🗑️</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {editingEntity && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h2>{editingEntity.data ? 'Editar' : 'Crear'} {editingEntity.type === 'supervisor' ? 'Supervisor' : 'Servicio'}</h2>
+              <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {editingEntity.type === 'supervisor' ? (
+                  <>
+                    <input
+                      type="text" placeholder="Nombre" className="card" style={{ margin: 0 }}
+                      value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    />
+                    <input
+                      type="text" placeholder="Apellido" className="card" style={{ margin: 0 }}
+                      value={formData.surname} onChange={e => setFormData({ ...formData, surname: e.target.value })}
+                    />
+                    <input
+                      type="text" placeholder="DNI" className="card" style={{ margin: 0 }}
+                      value={formData.dni} onChange={e => setFormData({ ...formData, dni: e.target.value })}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text" placeholder="Nombre del Servicio" className="card" style={{ margin: 0 }}
+                      value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    />
+                    <input
+                      type="text" placeholder="Dirección" className="card" style={{ margin: 0 }}
+                      value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })}
+                    />
+                    <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: 0 }}>
+                      <input
+                        type="number" placeholder="Latitud" className="card" style={{ margin: 0 }}
+                        value={formData.lat} onChange={e => setFormData({ ...formData, lat: parseFloat(e.target.value) })}
+                      />
+                      <input
+                        type="number" placeholder="Longitud" className="card" style={{ margin: 0 }}
+                        value={formData.lng} onChange={e => setFormData({ ...formData, lng: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                    <button className="btn btn-secondary" onClick={() => {
+                      navigator.geolocation.getCurrentPosition(pos => {
+                        setFormData({ ...formData, lat: pos.coords.latitude, lng: pos.coords.longitude });
+                      }, err => alert("No se pudo obtener la ubicación: " + err.message));
+                    }}>
+                      📍 Capturar posición actual
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="flex-between" style={{ marginTop: '2rem' }}>
+                <button className="btn btn-secondary" onClick={() => setEditingEntity(null)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={() => {
+                  if (editingEntity.type === 'supervisor') {
+                    editingEntity.data ? updateSupervisor(editingEntity.data.id, formData) : addSupervisor(formData);
+                  } else {
+                    editingEntity.data ? updateService(editingEntity.data.id, formData) : addService(formData);
+                  }
+                  setEditingEntity(null);
+                }}>
+                  Guardar Cambios
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="app-wrapper">
       <aside className="sidebar">
@@ -292,22 +641,36 @@ function App() {
           LASIA <span>LIMPIEZA</span>
         </div>
         <nav className="sidebar-menu">
-          <div className={`menu-item ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
-            🏠 Dashboard
-          </div>
-          <div className={`menu-item ${view === 'rrhh' ? 'active' : ''}`} onClick={() => setView('rrhh')}>
-            👥 Personal
-          </div>
-          <div className={`menu-item ${view === 'periodo-prueba' ? 'active' : ''}`} onClick={() => setView('periodo-prueba')}>
-            ⏳ Periodos Prueba
-          </div>
-          <div className={`menu-item ${view === 'visitas' ? 'active' : ''}`} onClick={() => setView('visitas')}>
-            📋 Supervisores
-          </div>
-          <div className={`menu-item ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>
-            ⚙ Configuración
-          </div>
+          {currentUser?.role === 'admin' && (
+            <>
+              <div className={`menu-item ${view === 'dashboard' ? 'active' : ''}`} onClick={() => setView('dashboard')}>
+                🏠 Dashboard
+              </div>
+              <div className={`menu-item ${view === 'rrhh' ? 'active' : ''}`} onClick={() => setView('rrhh')}>
+                👥 Personal
+              </div>
+              <div className={`menu-item ${view === 'periodo-prueba' ? 'active' : ''}`} onClick={() => setView('periodo-prueba')}>
+                ⏳ Periodos Prueba
+              </div>
+              <div className={`menu-item ${view === 'visitas' ? 'active' : ''}`} onClick={() => setView('visitas')}>
+                📋 Supervisores
+              </div>
+              <div className={`menu-item ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>
+                ⚙ Configuración
+              </div>
+            </>
+          )}
+          {currentUser?.role === 'supervisor' && (
+            <div className={`menu-item active`} onClick={() => setView('visitas')}>
+              📋 Mis Servicios
+            </div>
+          )}
         </nav>
+        <div style={{ padding: '1rem 2rem' }}>
+          <button className="btn btn-secondary" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: '#fff' }} onClick={handleLogout}>
+            🚪 Cerrar Sesión
+          </button>
+        </div>
         <div style={{ padding: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
           Digitalización Integral
         </div>
@@ -315,8 +678,9 @@ function App() {
 
       <main className="main-container">
         <div className="content-area">
-          {view === 'dashboard' && renderDashboard()}
-          {view === 'rrhh' && (
+          {view === 'login' && renderLogin()}
+          {view === 'dashboard' && currentUser?.role === 'admin' && renderDashboard()}
+          {view === 'rrhh' && currentUser?.role === 'admin' && (
             <HRSection
               employees={employees}
               setEmployees={setEmployees}
@@ -330,48 +694,52 @@ function App() {
               supervisors={supervisors}
             />
           )}
-          {view === 'periodo-prueba' && renderPeriodoPrueba()}
-          {view === 'visitas' && renderVisitas()}
-          {view === 'config' && <div className="card"><h3>Página de configuración próximamente...</h3></div>}
+          {view === 'periodo-prueba' && currentUser?.role === 'admin' && renderPeriodoPrueba()}
+          {view === 'visitas' && (currentUser?.role === 'admin' ? renderVisitas() : renderSupervisorDashboard())}
+          {view === 'config' && currentUser?.role === 'admin' && renderConfig()}
         </div>
       </main>
 
       {/* Basic Admin Modals */}
-      {showConfigModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <header className="flex-between">
-              <h2>Configuración</h2>
-              <button className="btn btn-secondary" onClick={() => setShowConfigModal(null)}>✕</button>
-            </header>
-            <p style={{ marginTop: '1rem' }}>Función de edición rápida disponible próximamente.</p>
-          </div>
-        </div>
-      )}
-
-      {showVisitForm && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h2>Registro de Visita</h2>
-            <p>{showVisitForm.name}</p>
-            <textarea
-              placeholder="Insumos necesarios..."
-              value={suppliesNote}
-              onChange={e => setSuppliesNote(e.target.value)}
-              className="card" style={{ width: '100%', marginTop: '1rem' }}
-            />
-            <div className="flex-between" style={{ marginTop: '1rem' }}>
-              <button className="btn btn-secondary" onClick={() => setShowVisitForm(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={() => {
-                const newVisit = { serviceId: showVisitForm.id, supervisorId: selectedSupervisor.id, timestamp: new Date().toISOString(), supplies: suppliesNote };
-                setVisitedServices([...visitedServices, newVisit]);
-                setShowVisitForm(null);
-                setSuppliesNote('');
-              }}>Guardar</button>
+      {
+        showConfigModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <header className="flex-between">
+                <h2>Configuración</h2>
+                <button className="btn btn-secondary" onClick={() => setShowConfigModal(null)}>✕</button>
+              </header>
+              <p style={{ marginTop: '1rem' }}>Función de edición rápida disponible próximamente.</p>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
+
+      {
+        showVisitForm && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h2>Registro de Visita</h2>
+              <p>{showVisitForm.name}</p>
+              <textarea
+                placeholder="Insumos necesarios..."
+                value={suppliesNote}
+                onChange={e => setSuppliesNote(e.target.value)}
+                className="card" style={{ width: '100%', marginTop: '1rem' }}
+              />
+              <div className="flex-between" style={{ marginTop: '1rem' }}>
+                <button className="btn btn-secondary" onClick={() => setShowVisitForm(null)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={() => {
+                  const newVisit = { serviceId: showVisitForm.id, supervisorId: selectedSupervisor.id, timestamp: new Date().toISOString(), supplies: suppliesNote };
+                  setVisitedServices([...visitedServices, newVisit]);
+                  setShowVisitForm(null);
+                  setSuppliesNote('');
+                }}>Guardar</button>
+              </div>
+            </div>
+          </div>
+        )
+      }
     </div>
   );
 }
