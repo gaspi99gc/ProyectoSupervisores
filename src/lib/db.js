@@ -10,4 +10,13 @@ if (!url || !authToken) {
 export const db = createClient({
     url: url || 'libsql://dummy.turso.io',
     authToken: authToken || 'dummy-token',
+    fetch: (...args) => {
+        return fetch(...args).then(res => {
+            // Next.js fetch patch breaks LibSQL stream body.cancel
+            if (res.body && typeof res.body.cancel !== 'function') {
+                res.body.cancel = () => { };
+            }
+            return res;
+        });
+    }
 });
