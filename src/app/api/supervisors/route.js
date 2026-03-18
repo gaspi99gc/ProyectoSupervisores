@@ -6,7 +6,7 @@ export async function GET() {
         return Response.json(rows);
     } catch (error) {
         console.error('Error fetching supervisors:', error);
-        return Response.json({ error: 'Failed to fetch supervisors' }, { status: 500 });
+        return Response.json({ error: 'Failed to fetch supervisors', details: String(error) }, { status: 500 });
     }
 }
 
@@ -39,6 +39,6 @@ export async function POST(req) {
         }, { status: 201 });
     } catch (error) {
         console.error('Error creating supervisor:', error);
-        return Response.json({ error: 'Failed to create supervisor' }, { status: 500 });
+        return Response.json({ error: 'Failed to create supervisor', details: String(error) }, { status: 500 });
     }
 }
