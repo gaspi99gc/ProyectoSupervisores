@@ -12,6 +12,12 @@ export default function ConfigPage() {
     const [services, setServices] = useState([]);
     const [supplies, setSupplies] = useState([]);
 
+    // Recorridos state
+    const [selectedSupervisorForRoute, setSelectedSupervisorForRoute] = useState('');
+    const [currentRoute, setCurrentRoute] = useState([]);
+    const [availableServices, setAvailableServices] = useState([]);
+    const [routeMessage, setRouteMessage] = useState(null);
+
     useEffect(() => {
         const load = async () => {
             try {
@@ -29,6 +35,32 @@ export default function ConfigPage() {
         };
         load();
     }, []);
+
+    // Load route when supervisor selected
+    useEffect(() => {
+        if (!selectedSupervisorForRoute) {
+            setCurrentRoute([]);
+            return;
+        }
+        const loadRoute = async () => {
+            try {
+                const res = await fetch(`/api/supervisor-routes?supervisor_id=${selectedSupervisorForRoute}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setCurrentRoute(data);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        loadRoute();
+    }, [selectedSupervisorForRoute]);
+
+    // Update available services (exclude already in route)
+    useEffect(() => {
+        const routeServiceIds = currentRoute.map(r => r.service_id);
+        setAvailableServices(services.filter(s => !routeServiceIds.includes(s.id)));
+    }, [currentRoute, services]);
 
     const openModal = (type, data = null) => {
         setEditingEntity({ type, data });
@@ -92,7 +124,7 @@ export default function ConfigPage() {
     };
 
     const handleDelete = async (type, id) => {
-        if (!confirm(`¿Estás seguro de eliminar este ${type === 'supervisor' ? 'supervisor' : 'servicio'}?`)) return;
+        if (!confirm(`¿Estás seguro de eliminar este ${type === 'supervisor' ? 'supervisor' : type === 'service' ? 'servicio' : 'insumo'}?`)) return;
 
         const endpoint = type === 'supervisor' ? `/api/supervisors/${id}` : type === 'service' ? `/api/services/${id}` : `/api/supplies/${id}`;
         try {
@@ -113,6 +145,69 @@ export default function ConfigPage() {
         }
     };
 
+    // Route management functions
+    const addToRoute = (serviceId) => {
+        const service = services.find(s => s.id === parseInt(serviceId));
+        if (!service) return;
+        setCurrentRoute([...currentRoute, {
+            service_id: service.id,
+            service_name: service.name,
+            service_address: service.address,
+            lat: service.lat,
+            lng: service.lng,
+            route_order: currentRoute.length + 1,
+        }]);
+    };
+
+    const removeFromRoute = (index) => {
+        const newRoute = currentRoute.filter((_, i) => i !== index).map((r, i) => ({
+            ...r,
+            route_order: i + 1,
+        }));
+        setCurrentRoute(newRoute);
+    };
+
+    const moveInRoute = (index, direction) => {
+        const newRoute = [...currentRoute];
+        const targetIdx = index + direction;
+        if (targetIdx < 0 || targetIdx >= newRoute.length) return;
+        [newRoute[index], newRoute[targetIdx]] = [newRoute[targetIdx], newRoute[index]];
+        setCurrentRoute(newRoute.map((r, i) => ({ ...r, route_order: i + 1 })));
+    };
+
+    const saveRoute = async () => {
+        if (!selectedSupervisorForRoute) return;
+        setRouteMessage(null);
+        try {
+            const res = await fetch('/api/supervisor-routes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    supervisor_id: parseInt(selectedSupervisorForRoute),
+                    services: currentRoute.map((r, i) => ({
+                        service_id: r.service_id,
+                        route_order: i + 1,
+                    })),
+                }),
+            });
+
+            if (res.ok) {
+                setRouteMessage({ text: 'Recorrido guardado correctamente.', type: 'success' });
+            } else {
+                setRouteMessage({ text: 'Error al guardar el recorrido.', type: 'error' });
+            }
+        } catch (err) {
+            setRouteMessage({ text: 'Error de red.', type: 'error' });
+        }
+    };
+
+    const tabs = [
+        { key: 'supervisors', label: 'Supervisores' },
+        { key: 'services', label: 'Servicios' },
+        { key: 'supplies', label: 'Insumos' },
+        { key: 'routes', label: 'Recorridos' },
+    ];
+
     return (
         <MainLayout>
             <div className="config-view">
@@ -121,31 +216,21 @@ export default function ConfigPage() {
                         <h1>Configuración del Sistema</h1>
                         <p style={{ color: 'var(--text-muted)' }}>Gestión de recursos y acceso</p>
                     </div>
-                    <div className="tabs" style={{ display: 'flex', gap: '1rem', background: '#eee', padding: '0.4rem', borderRadius: '12px' }}>
-                        <button
-                            className={`btn ${configTab === 'supervisors' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setConfigTab('supervisors')}
-                            style={{ boxShadow: configTab === 'supervisors' ? '' : 'none' }}
-                        >
-                            Supervisores
-                        </button>
-                        <button
-                            className={`btn ${configTab === 'services' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setConfigTab('services')}
-                            style={{ boxShadow: configTab === 'services' ? '' : 'none' }}
-                        >
-                            Servicios
-                        </button>
-                        <button
-                            className={`btn ${configTab === 'supplies' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setConfigTab('supplies')}
-                            style={{ boxShadow: configTab === 'supplies' ? '' : 'none' }}
-                        >
-                            Insumos
-                        </button>
+                    <div className="tabs" style={{ display: 'flex', gap: '0.5rem', background: '#eee', padding: '0.4rem', borderRadius: '12px' }}>
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.key}
+                                className={`btn ${configTab === tab.key ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setConfigTab(tab.key)}
+                                style={{ boxShadow: configTab === tab.key ? '' : 'none' }}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </header>
 
+                {/* ============ SUPERVISORES ============ */}
                 {configTab === 'supervisors' ? (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="flex-between" style={{ padding: '1.5rem' }}>
@@ -174,6 +259,8 @@ export default function ConfigPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    /* ============ SERVICIOS ============ */
                 ) : configTab === 'services' ? (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="flex-between" style={{ padding: '1.5rem' }}>
@@ -195,7 +282,9 @@ export default function ConfigPage() {
                                         <td><strong>{s.name}</strong></td>
                                         <td>{s.address}</td>
                                         <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            {Number(s.lat)?.toFixed(4)}, {Number(s.lng)?.toFixed(4)}
+                                            {s.lat && s.lng ? `${Number(s.lat)?.toFixed(4)}, ${Number(s.lng)?.toFixed(4)}` : (
+                                                <span style={{ color: 'var(--warning)', fontWeight: 600 }}>⚠️ Sin GPS</span>
+                                            )}
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <button className="btn btn-secondary" style={{ marginRight: '0.5rem' }} onClick={() => openModal('service', s)}>✏️</button>
@@ -206,6 +295,8 @@ export default function ConfigPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    /* ============ INSUMOS ============ */
                 ) : configTab === 'supplies' ? (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="flex-between" style={{ padding: '1.5rem' }}>
@@ -240,12 +331,178 @@ export default function ConfigPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    /* ============ RECORRIDOS ============ */
+                ) : configTab === 'routes' ? (
+                    <div>
+                        <div className="card">
+                            <h3 style={{ marginBottom: '1.5rem' }}>📋 Asignar Recorrido a Supervisor</h3>
+                            <div className="form-group">
+                                <label>Seleccionar Supervisor:</label>
+                                <select
+                                    value={selectedSupervisorForRoute}
+                                    onChange={(e) => setSelectedSupervisorForRoute(e.target.value)}
+                                    style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
+                                >
+                                    <option value="">-- Elegí un supervisor --</option>
+                                    {supervisors.map(s => (
+                                        <option key={s.id} value={s.id}>{s.surname}, {s.name} (DNI: {s.dni})</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {selectedSupervisorForRoute && (
+                            <>
+                                {/* Current Route */}
+                                <div className="card">
+                                    <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                                        <h3>🗺️ Recorrido Actual</h3>
+                                        <button
+                                            className="btn btn-primary"
+                                            onClick={saveRoute}
+                                            style={{ gap: '0.4rem' }}
+                                        >
+                                            💾 Guardar Recorrido
+                                        </button>
+                                    </div>
+
+                                    {routeMessage && (
+                                        <div style={{
+                                            padding: '0.75rem',
+                                            borderRadius: 'var(--radius-sm)',
+                                            marginBottom: '1rem',
+                                            background: routeMessage.type === 'success' ? '#DCFCE7' : '#FEE2E2',
+                                            color: routeMessage.type === 'success' ? '#166534' : '#991B1B',
+                                            fontWeight: 500,
+                                            textAlign: 'center',
+                                        }}>
+                                            {routeMessage.text}
+                                        </div>
+                                    )}
+
+                                    {currentRoute.length === 0 ? (
+                                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                            <p>No hay servicios asignados. Agregá servicios desde la lista de abajo.</p>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            {currentRoute.map((r, idx) => (
+                                                <div key={`${r.service_id}-${idx}`} style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '1rem',
+                                                    padding: '0.85rem 1rem',
+                                                    background: idx % 2 === 0 ? '#F8FAFC' : '#fff',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    marginBottom: '0.35rem',
+                                                    border: '1px solid var(--border-color)',
+                                                }}>
+                                                    <div style={{
+                                                        width: '32px',
+                                                        height: '32px',
+                                                        borderRadius: '50%',
+                                                        background: 'var(--color-primary)',
+                                                        color: '#fff',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontWeight: 700,
+                                                        fontSize: '0.85rem',
+                                                        flexShrink: 0,
+                                                    }}>
+                                                        {idx + 1}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <strong>{r.service_name}</strong>
+                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                            {r.service_address || 'Sin dirección'}
+                                                            {r.lat && r.lng && (
+                                                                <span> • GPS: {Number(r.lat).toFixed(4)}, {Number(r.lng).toFixed(4)}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                                                            onClick={() => moveInRoute(idx, -1)}
+                                                            disabled={idx === 0}
+                                                            title="Subir"
+                                                        >
+                                                            ⬆️
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
+                                                            onClick={() => moveInRoute(idx, 1)}
+                                                            disabled={idx === currentRoute.length - 1}
+                                                            title="Bajar"
+                                                        >
+                                                            ⬇️
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', color: 'var(--error)' }}
+                                                            onClick={() => removeFromRoute(idx)}
+                                                            title="Quitar"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Available Services */}
+                                <div className="card">
+                                    <h3 style={{ marginBottom: '1rem' }}>➕ Agregar Servicio al Recorrido</h3>
+                                    {availableServices.length === 0 ? (
+                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                                            Todos los servicios ya están en el recorrido.
+                                        </p>
+                                    ) : (
+                                        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                                            {availableServices.map(s => (
+                                                <div key={s.id} style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '0.85rem 1rem',
+                                                    background: '#F8FAFC',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid var(--border-color)',
+                                                }}>
+                                                    <div>
+                                                        <strong>{s.name}</strong>
+                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                            {s.address || 'Sin dirección'}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        className="btn btn-primary"
+                                                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                        onClick={() => addToRoute(s.id)}
+                                                    >
+                                                        + Agregar
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 ) : null}
 
+                {/* ============ MODAL ============ */}
                 {editingEntity && (
                     <div className="modal-overlay">
                         <div className="modal-content">
-                            <h2>{editingEntity.data ? 'Editar' : 'Crear'} {editingEntity.type === 'supervisor' ? 'Supervisor' : 'Servicio'}</h2>
+                            <h2>{editingEntity.data ? 'Editar' : 'Crear'} {editingEntity.type === 'supervisor' ? 'Supervisor' : editingEntity.type === 'service' ? 'Servicio' : 'Insumo'}</h2>
                             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {editingEntity.type === 'supervisor' ? (
                                     <>

@@ -62,7 +62,17 @@ CREATE TABLE attendance (
   lat REAL NOT NULL,
   lng REAL NOT NULL,
   verified BOOLEAN DEFAULT 0, -- true si estaba a <200m del servicio
-  distance_meters REAL -- distancia real al servicio
+  distance_meters REAL, -- distancia real al servicio
+  zone TEXT DEFAULT 'red' -- 'green' (<= 200m), 'yellow' (201-500m), 'red' (> 500m)
+);
+
+-- ★ NUEVO: Recorridos de supervisores (servicios asignados en orden)
+CREATE TABLE supervisor_routes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  supervisor_id INTEGER REFERENCES supervisors(id),
+  service_id INTEGER REFERENCES services(id),
+  route_order INTEGER NOT NULL,
+  UNIQUE(supervisor_id, service_id)
 );
 
 -- ★ NUEVO: Insumos (lista fija, admin configurable)

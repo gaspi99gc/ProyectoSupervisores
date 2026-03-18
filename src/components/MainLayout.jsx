@@ -63,11 +63,18 @@ export default function MainLayout({ children }) {
                             </Link>
                         </>
                     ) : (
-                        <Link href="/mi-panel">
-                            <div className={`menu-item ${pathname === '/mi-panel' ? 'active' : ''}`}>
-                                📍 Mi Panel
-                            </div>
-                        </Link>
+                        <>
+                            <Link href="/mi-panel/presentismo">
+                                <div className={`menu-item ${pathname === '/mi-panel/presentismo' ? 'active' : ''}`}>
+                                    📍 Fichaje
+                                </div>
+                            </Link>
+                            <Link href="/mi-panel/relevamiento">
+                                <div className={`menu-item ${pathname === '/mi-panel/relevamiento' ? 'active' : ''}`}>
+                                    📦 Insumos
+                                </div>
+                            </Link>
+                        </>
                     )}
                 </nav>
                 <div style={{ padding: '1rem 2rem' }}>
