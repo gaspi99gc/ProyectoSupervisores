@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 
 export async function PUT(req, { params }) {
     try {
-        const id = params.id;
+        const { id } = await params;
         const { name, address, lat, lng } = await req.json();
 
         await db.execute({
@@ -19,7 +19,7 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
     try {
-        const id = params.id;
+        const { id } = await params;
         await db.execute({
             sql: 'DELETE FROM services WHERE id = ?',
             args: [id]

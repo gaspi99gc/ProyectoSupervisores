@@ -42,13 +42,8 @@ export default function MainLayout({ children }) {
                                 </div>
                             </Link>
                             <Link href="/rrhh">
-                                <div className={`menu-item ${pathname === '/rrhh' ? 'active' : ''}`}>
-                                    👥 Personal
-                                </div>
-                            </Link>
-                            <Link href="/periodo-prueba">
-                                <div className={`menu-item ${pathname === '/periodo-prueba' ? 'active' : ''}`}>
-                                    ⏳ Periodos Prueba
+                                <div className={`menu-item ${pathname === '/rrhh' || pathname === '/periodo-prueba' ? 'active' : ''}`}>
+                                    👥 RRHH
                                 </div>
                             </Link>
                             <Link href="/supervisores">

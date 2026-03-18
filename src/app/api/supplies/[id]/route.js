@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 
 export async function PUT(request, { params }) {
     try {
-        const { id } = params;
+        const { id } = await params;
         const { nombre, unidad, activo } = await request.json();
 
         await db.execute({
@@ -19,7 +19,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
     try {
-        const { id } = params;
+        const { id } = await params;
 
         // Optionally, check if the supply is used in supply_request_items before deleting
         // Or simply set activo = 0 instead of hard delete

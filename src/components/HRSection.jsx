@@ -3,7 +3,8 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
-export default function HRSection() {
+export default function HRSection({ initialTab = 'personal' }) {
+    const [sectionTab, setSectionTab] = useState(initialTab);
     const [subView, setSubView] = useState('nomina');
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
     const [showForm, setShowForm] = useState(false);
@@ -44,6 +45,10 @@ export default function HRSection() {
         };
         loadInitialData();
     }, []);
+
+    useEffect(() => {
+        setSectionTab(initialTab);
+    }, [initialTab]);
 
     const addAudit = (accion, entidad, entidad_id, detalle) => {
         const newLog = {
@@ -248,6 +253,50 @@ export default function HRSection() {
         return { color: '🟢', label: 'Completo' };
     };
 
+    const getServiceName = (emp) => {
+        return emp.service_name || services.find(s => s.id === Number(emp.servicio_id))?.name || '---';
+    };
+
+    const getTrialPeriodStatus = (fechaFinPrueba) => {
+        const hoy = new Date();
+        const vencimiento = new Date(fechaFinPrueba);
+        const diffDays = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) return { badge: 'badge-danger', label: 'Vencido', diffDays };
+        if (diffDays <= 15) return { badge: 'badge-warning', label: 'Por vencer', diffDays };
+        return { badge: 'badge-success', label: 'Vigente', diffDays };
+    };
+
+    const trialPeriodEmployees = useMemo(() => {
+        return [...employees]
+            .filter(emp => emp.estado_empleado === 'Activo' && emp.fecha_fin_prueba)
+            .sort((a, b) => new Date(a.fecha_fin_prueba) - new Date(b.fecha_fin_prueba));
+    }, [employees]);
+
+    const exportTrialPeriodsToExcel = () => {
+        const data = trialPeriodEmployees.map(emp => {
+            const status = getTrialPeriodStatus(emp.fecha_fin_prueba);
+
+            return {
+                Legajo: emp.legajo,
+                Apellido: emp.apellido,
+                Nombre: emp.nombre,
+                DNI: emp.dni,
+                CUIL: emp.cuil,
+                Servicio: getServiceName(emp),
+                'Fecha Ingreso': emp.fecha_ingreso,
+                'Vencimiento Prueba': emp.fecha_fin_prueba,
+                'Dias Restantes': status.diffDays,
+                Estado: status.label
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Vencimientos');
+        XLSX.writeFile(workbook, `Reporte_RRHH_Prueba_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
     const filteredEmployees = useMemo(() => {
         return employees.filter(emp => {
             const matchesSearch = (emp.nombre + emp.apellido + emp.dni + emp.legajo + emp.cuil).toLowerCase().includes(searchTerm.toLowerCase());
@@ -256,6 +305,71 @@ export default function HRSection() {
             return matchesSearch && matchesStatus && matchesSem;
         });
     }, [employees, searchTerm, filters, employeeDocuments]);
+
+    const renderTrialPeriods = () => (
+        <div className="periodos-rrhh-view">
+            <header className="flex-between" style={{ marginBottom: '2rem' }}>
+                <div>
+                    <h1>Períodos de Prueba</h1>
+                    <p style={{ color: 'var(--text-muted)' }}>Seguimiento centralizado de vencimientos y estabilidad laboral</p>
+                </div>
+                <button className="btn btn-primary" onClick={exportTrialPeriodsToExcel}>📥 Descargar Informe Excel</button>
+            </header>
+
+            <div className="card" style={{ padding: 0 }}>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Empleado</th>
+                                <th>Legajo</th>
+                                <th>Servicio</th>
+                                <th>Fecha Ingreso</th>
+                                <th>Vencimiento</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {trialPeriodEmployees.map(emp => {
+                                const status = getTrialPeriodStatus(emp.fecha_fin_prueba);
+
+                                return (
+                                    <tr key={emp.id}>
+                                        <td><strong>{emp.apellido}, {emp.nombre}</strong></td>
+                                        <td>{emp.legajo || '---'}</td>
+                                        <td>{getServiceName(emp)}</td>
+                                        <td>{emp.fecha_ingreso ? new Date(emp.fecha_ingreso).toLocaleDateString() : '---'}</td>
+                                        <td><strong>{new Date(emp.fecha_fin_prueba).toLocaleDateString()}</strong></td>
+                                        <td><span className={`badge ${status.badge}`}>{status.label}</span></td>
+                                        <td>
+                                            <button
+                                                className="btn btn-secondary"
+                                                onClick={() => {
+                                                    setSectionTab('personal');
+                                                    setSelectedEmployeeId(emp.id);
+                                                    setSubView('perfil');
+                                                }}
+                                            >
+                                                Abrir legajo
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {trialPeriodEmployees.length === 0 && (
+                                <tr>
+                                    <td colSpan="7" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                                        No hay empleados en período de prueba.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
 
     const renderNomina = () => (
         <div className="nomina-view">
@@ -496,9 +610,45 @@ export default function HRSection() {
 
     return (
         <div className="hr-section-v3">
-            {subView === 'nomina' && renderNomina()}
-            {subView === 'perfil' && renderPerfil()}
-            {subView === 'admin' && renderAdmin()}
+            <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-primary-light)', padding: '0.4rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', width: 'fit-content' }}>
+                <button
+                    type="button"
+                    onClick={() => setSectionTab('personal')}
+                    style={{
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '0.75rem 1rem',
+                        background: sectionTab === 'personal' ? 'var(--color-primary)' : 'transparent',
+                        color: sectionTab === 'personal' ? '#fff' : 'var(--text-main)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        boxShadow: sectionTab === 'personal' ? 'var(--shadow-md)' : 'none'
+                    }}
+                >
+                    Personal
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setSectionTab('periodos')}
+                    style={{
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '0.75rem 1rem',
+                        background: sectionTab === 'periodos' ? 'var(--color-primary)' : 'transparent',
+                        color: sectionTab === 'periodos' ? '#fff' : 'var(--text-main)',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        boxShadow: sectionTab === 'periodos' ? 'var(--shadow-md)' : 'none'
+                    }}
+                >
+                    Períodos de prueba
+                </button>
+            </div>
+
+            {sectionTab === 'personal' && subView === 'nomina' && renderNomina()}
+            {sectionTab === 'personal' && subView === 'perfil' && renderPerfil()}
+            {sectionTab === 'personal' && subView === 'admin' && renderAdmin()}
+            {sectionTab === 'periodos' && renderTrialPeriods()}
 
             {showForm && (
                 <div className="modal-overlay">

@@ -1,12 +1,13 @@
-'use client';
-
 import MainLayout from '@/components/MainLayout';
 import HRSection from '@/components/HRSection';
 
-export default function RRHHPage() {
+export default async function RRHHPage({ searchParams }) {
+    const params = await searchParams;
+    const initialTab = params?.tab === 'periodos' ? 'periodos' : 'personal';
+
     return (
         <MainLayout>
-            <HRSection />
+            <HRSection initialTab={initialTab} />
         </MainLayout>
     );
 }
