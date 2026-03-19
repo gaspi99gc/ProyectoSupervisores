@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginScreen() {
-    const [dni, setDni] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const router = useRouter();
 
@@ -16,7 +17,7 @@ export default function LoginScreen() {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dni })
+                body: JSON.stringify({ username, password })
             });
 
             const data = await res.json();
@@ -33,7 +34,7 @@ export default function LoginScreen() {
                     router.push('/mi-panel'); // Panel Supervisor
                 }
             } else {
-                setError(data.error || 'DNI incorrecto.');
+                setError(data.error || 'Usuario o contraseña incorrectos.');
             }
         } catch (err) {
             setError('Error de conexión al servidor.');
@@ -51,15 +52,28 @@ export default function LoginScreen() {
                 </div>
                 <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
                     <div className="form-group">
-                        <label>DNI del Supervisor</label>
+                        <label>Usuario</label>
                         <input
                             type="text"
-                            value={dni}
-                            onChange={(e) => setDni(e.target.value)}
-                            placeholder="Ingrese su DNI (ej: admin)"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder="DNI del supervisor o admin"
                             required
                         />
                     </div>
+                    <div className="form-group">
+                        <label>Contraseña</label>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Ingrese su contraseña"
+                            required
+                        />
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
+                        Para supervisores, el usuario es su DNI. El administrador gestiona las contraseñas desde Configuración.
+                    </p>
                     {error && <p className="error-message" style={{ color: 'var(--error)', marginBottom: '10px', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center' }}>{error}</p>}
                     <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.8rem 1rem', fontSize: '1.1rem', marginTop: '1rem' }}>
                         Ingresar

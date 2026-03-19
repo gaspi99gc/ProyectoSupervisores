@@ -114,7 +114,19 @@ export default function ConfigPage() {
         setEditingEntity({ type, data });
         setServiceCandidates([]);
         if (type === 'supervisor') {
-            setFormData(data || { name: '', surname: '', dni: '' });
+            setFormData(data ? {
+                ...data,
+                login_enabled: data.login_enabled !== false,
+                password: '',
+                confirmPassword: '',
+            } : {
+                name: '',
+                surname: '',
+                dni: '',
+                login_enabled: true,
+                password: '',
+                confirmPassword: '',
+            });
             setServiceGeoState({ loading: false, text: '', type: 'idle', isValidated: false, validatedAddress: '', candidateId: '' });
         } else if (type === 'service') {
             const hasSavedLocation = Boolean(data?.address && data?.lat && data?.lng);
@@ -225,7 +237,35 @@ export default function ConfigPage() {
         let payload = formData;
 
         try {
-            if (type === 'service') {
+            if (type === 'supervisor') {
+                if (!formData.name?.trim() || !formData.surname?.trim() || !formData.dni?.toString().trim()) {
+                    alert('Completá nombre, apellido y DNI del supervisor.');
+                    return;
+                }
+
+                if (!isEdit && !formData.password) {
+                    alert('Definí una contraseña inicial para el supervisor.');
+                    return;
+                }
+
+                if (formData.password && formData.password.length < 6) {
+                    alert('La contraseña debe tener al menos 6 caracteres.');
+                    return;
+                }
+
+                if ((formData.password || formData.confirmPassword) && formData.password !== formData.confirmPassword) {
+                    alert('Las contraseñas no coinciden.');
+                    return;
+                }
+
+                payload = {
+                    name: formData.name.trim(),
+                    surname: formData.surname.trim(),
+                    dni: formData.dni.toString().trim(),
+                    login_enabled: formData.login_enabled !== false,
+                    password: formData.password || undefined,
+                };
+            } else if (type === 'service') {
                 if (!formData.name?.trim()) {
                     alert('Ingresá el nombre del servicio.');
                     return;
@@ -261,10 +301,11 @@ export default function ConfigPage() {
 
             if (res.ok) {
                 if (type === 'supervisor') {
+                    const savedSupervisor = data.id ? data : { ...payload, id: editingEntity.data?.id };
                     if (isEdit) {
-                        setSupervisors(supervisors.map(s => s.id === editingEntity.data.id ? { ...s, ...payload } : s));
+                        setSupervisors(supervisors.map(s => s.id === editingEntity.data.id ? savedSupervisor : s));
                     } else {
-                        setSupervisors([...supervisors, data]);
+                        setSupervisors([...supervisors, savedSupervisor]);
                     }
                 } else if (type === 'service') {
                     const savedService = data.id ? data : { ...payload, id: editingEntity.data?.id };
@@ -443,7 +484,9 @@ export default function ConfigPage() {
                             <thead>
                                 <tr>
                                     <th>Nombre completo</th>
-                                    <th>DNI (Acceso)</th>
+                                    <th>Usuario</th>
+                                    <th>Acceso</th>
+                                    <th>Contraseña</th>
                                     <th style={{ textAlign: 'right' }}>Acciones</th>
                                 </tr>
                             </thead>
@@ -451,7 +494,20 @@ export default function ConfigPage() {
                                 {supervisors.map(s => (
                                     <tr key={s.id}>
                                         <td><strong>{s.surname}, {s.name}</strong></td>
-                                        <td>{s.dni}</td>
+                                        <td>
+                                            <strong>{s.dni}</strong>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Usuario de inicio de sesión</div>
+                                        </td>
+                                        <td>
+                                            <span className={`badge ${s.login_enabled ? 'badge-success' : 'badge-danger'}`}>
+                                                {s.login_enabled ? 'Habilitado' : 'Bloqueado'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className={`badge ${s.has_password ? 'badge-success' : 'badge-warning'}`}>
+                                                {s.has_password ? 'Configurada' : 'Pendiente'}
+                                            </span>
+                                        </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <button className="btn btn-secondary" style={{ marginRight: '0.5rem' }} onClick={() => openModal('supervisor', s)}>✏️</button>
                                             <button className="btn btn-secondary" style={{ color: 'var(--error)' }} onClick={() => handleDelete('supervisor', s.id)}>🗑️</button>
@@ -739,6 +795,9 @@ export default function ConfigPage() {
                             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {editingEntity.type === 'supervisor' ? (
                                     <>
+                                        <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: '#F8FAFC', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                            Usuario de inicio de sesión: <strong style={{ color: 'var(--text-main)' }}>{formData.dni || 'DNI del supervisor'}</strong>. El administrador define y actualiza la contraseña desde esta pantalla.
+                                        </div>
                                         <input
                                             type="text" placeholder="Nombre" className="card" style={{ margin: 0 }}
                                             value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -751,6 +810,41 @@ export default function ConfigPage() {
                                             type="text" placeholder="DNI" className="card" style={{ margin: 0 }}
                                             value={formData.dni || ''} onChange={e => setFormData({ ...formData, dni: e.target.value })}
                                         />
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: '#fff' }}>
+                                            <div>
+                                                <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>Acceso habilitado</div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Si lo desactivás, el supervisor no podrá iniciar sesión.</div>
+                                            </div>
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.login_enabled !== false}
+                                                onChange={e => setFormData({ ...formData, login_enabled: e.target.checked })}
+                                                style={{ width: 'auto', margin: 0, transform: 'scale(1.2)' }}
+                                            />
+                                        </div>
+                                        <input
+                                            type="password"
+                                            placeholder={editingEntity.data ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}
+                                            className="card"
+                                            style={{ margin: 0 }}
+                                            value={formData.password || ''}
+                                            onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder={editingEntity.data ? 'Confirmar nueva contraseña' : 'Confirmar contraseña'}
+                                            className="card"
+                                            style={{ margin: 0 }}
+                                            value={formData.confirmPassword || ''}
+                                            onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                        />
+                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                            {editingEntity.data
+                                                ? (formData.has_password
+                                                    ? 'Dejá la contraseña vacía si querés mantener la actual.'
+                                                    : 'Este supervisor todavía no tiene contraseña configurada.')
+                                                : 'La contraseña inicial debe tener al menos 6 caracteres.'}
+                                        </div>
                                     </>
                                 ) : editingEntity.type === 'service' ? (
                                     <>

@@ -1,9 +1,12 @@
--- Supervisores (login por DNI)
+-- Supervisores (login por DNI + contrasena)
 CREATE TABLE supervisors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   surname TEXT NOT NULL,
-  dni TEXT UNIQUE NOT NULL
+  dni TEXT UNIQUE NOT NULL,
+  password_hash TEXT,
+  login_enabled INTEGER NOT NULL DEFAULT 1,
+  password_updated_at DATETIME
 );
 
 -- Servicios (con coordenadas GPS para geofencing)
