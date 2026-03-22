@@ -512,7 +512,7 @@ export default function HRSection({ initialTab = 'personal' }) {
 
                 <div className="profile-split-grid">
                     <div className="card" style={{ padding: 0 }}>
-                        <div style={{ padding: '1.5rem', borderBottom: '1px solid #eee' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
                             <h3 style={{ margin: 0 }}>Documentación Requerida</h3>
                         </div>
                         <div className="table-container">
@@ -560,7 +560,7 @@ export default function HRSection({ initialTab = 'personal' }) {
                         <h3>Historial de Cambios</h3>
                         <div className="audit-list" style={{ marginTop: '1rem', maxHeight: '400px', overflowY: 'auto' }}>
                             {auditLogs.filter(l => l.entidad_id === emp.id).map(log => (
-                                <div key={log.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid #f8fafc', fontSize: '0.8rem' }}>
+                                <div key={log.id} style={{ padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
                                     <div style={{ color: 'var(--text-muted)' }}>{formatArgentinaDateTime(log.timestamp)}</div>
                                     <div style={{ fontWeight: 500 }}>{log.detalle}</div>
                                 </div>
@@ -606,7 +606,7 @@ export default function HRSection({ initialTab = 'personal' }) {
                         ))}
                     </tbody>
                 </table>
-                <div style={{ padding: '1.5rem', background: '#f8fafc', borderTop: '1px solid #eee' }}>
+                <div style={{ padding: '1.5rem', background: 'var(--color-muted-surface)', borderTop: '1px solid var(--border-color)' }}>
                     <button className="btn btn-primary" onClick={() => alert("Función en desarrollo para base de datos")}>+ Agregar Tipo de Documento</button>
                 </div>
             </div>

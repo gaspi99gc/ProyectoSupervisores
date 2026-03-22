@@ -7,6 +7,8 @@ import Link from 'next/link';
 export default function MainLayout({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [themeMode, setThemeMode] = useState('light');
+    const [themeLoaded, setThemeLoaded] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
 
@@ -19,6 +21,26 @@ export default function MainLayout({ children }) {
             setCurrentUser(JSON.parse(saved));
         }
     }, [router]);
+
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('themeMode');
+        const initialTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light';
+
+        setThemeMode(initialTheme);
+        document.documentElement.dataset.theme = initialTheme;
+        document.documentElement.style.colorScheme = initialTheme;
+        setThemeLoaded(true);
+    }, []);
+
+    useEffect(() => {
+        if (!themeLoaded) {
+            return;
+        }
+
+        document.documentElement.dataset.theme = themeMode;
+        document.documentElement.style.colorScheme = themeMode;
+        localStorage.setItem('themeMode', themeMode);
+    }, [themeMode, themeLoaded]);
 
     const handleLogout = () => {
         localStorage.removeItem('currentUser');
@@ -107,8 +129,22 @@ export default function MainLayout({ children }) {
                     </button>
                 </div>
                 <div className="sidebar-footer" style={{ padding: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
-                    Digitalización Integral<br />
-                    {currentUser.name} {currentUser.surname}
+                    <div className="sidebar-footer-row">
+                        <div>
+                            Digitalización Integral<br />
+                            {currentUser.name} {currentUser.surname}
+                        </div>
+                        <label className="theme-switch" aria-label="Cambiar entre modo oscuro y claro" title={themeMode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}>
+                            <input
+                                type="checkbox"
+                                checked={themeMode === 'dark'}
+                                onChange={() => setThemeMode((current) => current === 'dark' ? 'light' : 'dark')}
+                            />
+                            <span className="theme-switch-track">
+                                <span className="theme-switch-thumb" />
+                            </span>
+                        </label>
+                    </div>
                 </div>
             </aside>
 

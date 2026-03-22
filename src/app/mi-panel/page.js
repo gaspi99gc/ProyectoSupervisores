@@ -1,13 +1,30 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Swal from 'sweetalert2';
 import MainLayout from '@/components/MainLayout';
+
+const SERVICE_NEAR_DISTANCE_METERS = 200;
+
+function getDistanceInMeters(lat1, lng1, lat2, lng2) {
+    const earthRadius = 6371e3;
+    const phi1 = lat1 * Math.PI / 180;
+    const phi2 = lat2 * Math.PI / 180;
+    const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+    const deltaLambda = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(deltaPhi / 2) ** 2
+        + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return earthRadius * c;
+}
 
 export default function SupervisorHomePage() {
     const [currentUser, setCurrentUser] = useState(null);
     const [services, setServices] = useState([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [status, setStatus] = useState('afuera');
+    const [entryCoordinates, setEntryCoordinates] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
@@ -73,6 +90,11 @@ export default function SupervisorHomePage() {
                 if (!cancelled) {
                     setStatus(data.status || 'afuera');
                     setSelectedServiceId(data.current_service_id ? String(data.current_service_id) : '');
+                    setEntryCoordinates(
+                        Number.isFinite(Number(data.entered_lat)) && Number.isFinite(Number(data.entered_lng))
+                            ? { lat: Number(data.entered_lat), lng: Number(data.entered_lng) }
+                            : null
+                    );
                 }
 
                 const servicesResponse = await fetch('/api/services');
@@ -108,6 +130,27 @@ export default function SupervisorHomePage() {
         return status === 'chambeando' ? 'SALIDA' : 'INGRESAR';
     }, [isLoading, status]);
 
+    const getCurrentCoordinates = async () => {
+        if (typeof window === 'undefined' || !navigator.geolocation) {
+            throw new Error('Tu dispositivo no permite obtener la ubicacion exacta.');
+        }
+
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => resolve({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                }),
+                (geoError) => reject(new Error(geoError.message || 'No se pudo obtener la ubicacion exacta del ingreso.')),
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0,
+                }
+            );
+        });
+    };
+
     const handleToggleStatus = async () => {
         if (!currentUser?.id || currentUser.id <= 0 || isLoading || isSaving) {
             return;
@@ -124,13 +167,45 @@ export default function SupervisorHomePage() {
             setIsSaving(true);
             setError('');
 
+            const ingresoCoordinates = nextStatus === 'chambeando'
+                ? await getCurrentCoordinates()
+                : null;
+
+            if (
+                nextStatus === 'chambeando'
+                && ingresoCoordinates
+                && Number.isFinite(Number(selectedService?.lat))
+                && Number.isFinite(Number(selectedService?.lng))
+            ) {
+                const distanceMeters = getDistanceInMeters(
+                    ingresoCoordinates.lat,
+                    ingresoCoordinates.lng,
+                    Number(selectedService.lat),
+                    Number(selectedService.lng)
+                );
+
+                if (distanceMeters > SERVICE_NEAR_DISTANCE_METERS) {
+                    await Swal.fire({
+                        title: 'No estas en el servicio',
+                        text: `Segui igual. La ubicacion de ingreso se registro a ${Math.round(distanceMeters)} metros del servicio seleccionado.`,
+                        icon: 'warning',
+                        iconColor: '#ef4444',
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: '#ef4444',
+                        background: '#ffffff',
+                    });
+                }
+            }
+
             const response = await fetch('/api/supervisor-status', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     supervisor_id: currentUser.id,
                     status: nextStatus,
-                    service_id: nextStatus === 'chambeando' ? Number(selectedServiceId) : undefined
+                    service_id: nextStatus === 'chambeando' ? Number(selectedServiceId) : undefined,
+                    lat: ingresoCoordinates?.lat,
+                    lng: ingresoCoordinates?.lng,
                 })
             });
 
@@ -142,6 +217,11 @@ export default function SupervisorHomePage() {
 
             setStatus(data.status || nextStatus);
             setSelectedServiceId(data.current_service_id ? String(data.current_service_id) : '');
+            setEntryCoordinates(
+                Number.isFinite(Number(data.entered_lat)) && Number.isFinite(Number(data.entered_lng))
+                    ? { lat: Number(data.entered_lat), lng: Number(data.entered_lng) }
+                    : null
+            );
         } catch (saveError) {
             setError(saveError.message || 'No se pudo actualizar el estado.');
         } finally {
@@ -191,10 +271,17 @@ export default function SupervisorHomePage() {
                     </button>
 
                     {!error ? (
-                        <p className="supervisor-home-status">
-                            Estado actual: <strong>{status === 'chambeando' ? 'chambeando' : 'afuera'}</strong>
-                            {status === 'chambeando' && selectedService ? ` en ${selectedService.name}` : ''}
-                        </p>
+                        <>
+                            <p className="supervisor-home-status">
+                                Estado actual: <strong>{status === 'chambeando' ? 'chambeando' : 'afuera'}</strong>
+                                {status === 'chambeando' && selectedService ? ` en ${selectedService.name}` : ''}
+                            </p>
+                            {status === 'chambeando' && entryCoordinates ? (
+                                <p className="supervisor-home-status">
+                                    Coordenadas de ingreso: <strong>{entryCoordinates.lat.toFixed(6)}, {entryCoordinates.lng.toFixed(6)}</strong>
+                                </p>
+                            ) : null}
+                        </>
                     ) : (
                         <p className="supervisor-home-error">{error}</p>
                     )}

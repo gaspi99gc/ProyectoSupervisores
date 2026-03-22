@@ -113,7 +113,7 @@ export default function Dashboard() {
                     </tr>
                   ))}
                   {recentTrials.length === 0 && (
-                    <tr><td colSpan="3" style={{ textAlign: 'center', color: '#999' }}>No hay vencimientos próximos</td></tr>
+                    <tr><td colSpan="3" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No hay vencimientos próximos</td></tr>
                   )}
                 </tbody>
               </table>

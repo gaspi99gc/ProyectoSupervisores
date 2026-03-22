@@ -3,7 +3,7 @@ import { ensureSupervisorStatusTable, getSupervisorStatus, updateSupervisorStatu
 
 function getErrorStatus(error) {
     const message = error?.message?.toLowerCase() || '';
-    return message.includes('seleccion') || message.includes('servicio') || message.includes('estado invalido')
+    return message.includes('seleccion') || message.includes('servicio') || message.includes('estado invalido') || message.includes('coordenadas')
         ? 400
         : 500;
 }
@@ -57,7 +57,7 @@ export async function GET(req) {
 
 export async function POST(req) {
     try {
-        const { supervisor_id, status, service_id } = await req.json();
+        const { supervisor_id, status, service_id, lat, lng } = await req.json();
 
         if (!supervisor_id) {
             return Response.json({ error: 'supervisor_id es requerido' }, { status: 400 });
@@ -90,7 +90,7 @@ export async function POST(req) {
                 return Response.json({ error: 'Servicio no encontrado' }, { status: 404 });
             }
 
-            const nextStatus = await updateSupervisorStatusWithService(supervisor_id, status, service_id);
+            const nextStatus = await updateSupervisorStatusWithService(supervisor_id, status, service_id, { lat, lng });
             return Response.json(nextStatus);
         }
 

@@ -11,7 +11,7 @@ export async function GET(req) {
         const days = Number(searchParams.get('days'));
 
         let query = `
-            SELECT pl.id, pl.event_type, pl.occurred_at,
+            SELECT pl.id, pl.event_type, pl.occurred_at, pl.event_lat, pl.event_lng,
                    s.id AS service_id, s.name AS service_name, s.address AS service_address,
                    sup.id AS supervisor_id, sup.name AS supervisor_name, sup.surname AS supervisor_surname, sup.dni AS supervisor_dni
             FROM supervisor_presentismo_logs pl

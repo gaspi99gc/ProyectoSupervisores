@@ -459,7 +459,7 @@ export default function ConfigPage() {
                         <h1>Configuración del Sistema</h1>
                         <p style={{ color: 'var(--text-muted)' }}>Gestión de recursos y acceso</p>
                     </div>
-                    <div className="tabs tabs-scroll" style={{ background: '#eee', padding: '0.4rem', borderRadius: '12px' }}>
+                    <div className="tabs tabs-scroll segmented-shell">
                         {tabs.map(tab => (
                             <button
                                 key={tab.key}
@@ -677,7 +677,7 @@ export default function ConfigPage() {
                                             {currentRoute.map((r, idx) => (
                                                 <div key={`${r.service_id}-${idx}`} className="route-item" style={{
                                                     padding: '0.85rem 1rem',
-                                                    background: idx % 2 === 0 ? '#F8FAFC' : '#fff',
+                                                    background: idx % 2 === 0 ? 'var(--color-muted-surface)' : 'var(--color-surface)',
                                                     borderRadius: 'var(--radius-sm)',
                                                     marginBottom: '0.35rem',
                                                     border: '1px solid var(--border-color)',
@@ -796,7 +796,7 @@ export default function ConfigPage() {
                             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {editingEntity.type === 'supervisor' ? (
                                     <>
-                                        <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: '#F8FAFC', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                        <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-muted-surface)', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
                                             Usuario de inicio de sesión: <strong style={{ color: 'var(--text-main)' }}>{formData.dni || 'DNI del supervisor'}</strong>. El administrador define y actualiza la contraseña desde esta pantalla.
                                         </div>
                                         <input
@@ -811,7 +811,7 @@ export default function ConfigPage() {
                                             type="text" placeholder="DNI" className="card" style={{ margin: 0 }}
                                             value={formData.dni || ''} onChange={e => setFormData({ ...formData, dni: e.target.value })}
                                         />
-                                        <div className="supervisor-toggle-row" style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: '#fff' }}>
+                                        <div className="supervisor-toggle-row" style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'var(--color-surface)' }}>
                                             <div>
                                                 <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>Acceso habilitado</div>
                                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Si lo desactivás, el supervisor no podrá iniciar sesión.</div>
@@ -878,7 +878,7 @@ export default function ConfigPage() {
                                                         style={{
                                                             border: '1px solid var(--border-color)',
                                                             borderRadius: 'var(--radius-md)',
-                                                            background: '#fff',
+                                                            background: 'var(--color-surface)',
                                                             padding: '1rem',
                                                             textAlign: 'left',
                                                             cursor: 'pointer',

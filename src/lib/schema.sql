@@ -75,6 +75,8 @@ CREATE TABLE supervisor_status (
   status TEXT NOT NULL DEFAULT 'afuera',
   current_service_id INTEGER REFERENCES services(id),
   entered_at DATETIME,
+  entered_lat REAL,
+  entered_lng REAL,
   exited_at DATETIME,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -85,6 +87,8 @@ CREATE TABLE supervisor_presentismo_logs (
   supervisor_id INTEGER NOT NULL REFERENCES supervisors(id),
   service_id INTEGER NOT NULL REFERENCES services(id),
   event_type TEXT NOT NULL,
+  event_lat REAL,
+  event_lng REAL,
   occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
