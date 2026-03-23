@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import MainLayout from '@/components/MainLayout';
 
 function createRequestItem(supplyId = '') {
@@ -16,6 +16,7 @@ function getDraftStorageKey(supervisorId) {
 }
 
 export default function PedidosInsumosPage() {
+    const supplyPickerRef = useRef(null);
     const [currentUser, setCurrentUser] = useState(null);
     const [services, setServices] = useState([]);
     const [supplies, setSupplies] = useState([]);
@@ -149,6 +150,15 @@ export default function PedidosInsumosPage() {
 
     const removeRequestItem = (localId) => {
         setRequestItems((currentItems) => currentItems.filter((item) => item.localId !== localId));
+    };
+
+    const handleQuantityEnter = (event) => {
+        if (event.key !== 'Enter') {
+            return;
+        }
+
+        event.preventDefault();
+        supplyPickerRef.current?.focus();
     };
 
     const buildPayloadItems = () => {
@@ -293,6 +303,7 @@ export default function PedidosInsumosPage() {
                         </div>
 
                         <select
+                            ref={supplyPickerRef}
                             value={supplyPickerValue}
                             onChange={(e) => {
                                 const selectedValue = e.target.value;
@@ -383,18 +394,14 @@ export default function PedidosInsumosPage() {
                                             <input
                                                 type="number"
                                                 min="0"
-                                                step="0.01"
-                                                placeholder={selectedSupply?.unidad ? `Cantidad en ${selectedSupply.unidad}` : 'Ingresá la cantidad'}
+                                                step="1"
+                                                inputMode="numeric"
+                                                placeholder="Ingresá la cantidad"
                                                 value={item.cantidad}
                                                 onChange={(e) => updateRequestItem(item.localId, 'cantidad', e.target.value)}
+                                                onKeyDown={handleQuantityEnter}
                                             />
                                         </div>
-
-                                        {selectedSupply ? (
-                                            <div className="placeholder-field">
-                                                Unidad: {selectedSupply.unidad || 'unidades'}
-                                            </div>
-                                        ) : null}
                                     </div>
                                 );
                             })}
