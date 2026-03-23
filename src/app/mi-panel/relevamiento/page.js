@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import MainLayout from '@/components/MainLayout';
 
-function createEmptyRequestItem() {
+function createRequestItem(supplyId = '') {
     return {
         localId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        supply_id: '',
+        supply_id: supplyId,
         cantidad: '',
     };
 }
@@ -20,7 +20,8 @@ export default function PedidosInsumosPage() {
     const [services, setServices] = useState([]);
     const [supplies, setSupplies] = useState([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
-    const [requestItems, setRequestItems] = useState([createEmptyRequestItem()]);
+    const [requestItems, setRequestItems] = useState([]);
+    const [supplyPickerValue, setSupplyPickerValue] = useState('');
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -74,7 +75,7 @@ export default function PedidosInsumosPage() {
 
                     if (Array.isArray(draft?.items) && draft.items.length > 0) {
                         setRequestItems(draft.items.map((item) => ({
-                            localId: createEmptyRequestItem().localId,
+                            localId: createRequestItem().localId,
                             supply_id: item.supply_id ? String(item.supply_id) : '',
                             cantidad: item.cantidad?.toString() || '',
                         })));
@@ -104,6 +105,19 @@ export default function PedidosInsumosPage() {
             .filter(Boolean);
     }, [requestItems]);
 
+    const availableSuppliesToAdd = useMemo(() => {
+        return supplies.filter((supply) => !selectedSupplyIds.includes(String(supply.id)));
+    }, [selectedSupplyIds, supplies]);
+
+    const requestSummary = useMemo(() => {
+        const itemsWithQuantity = requestItems.filter((item) => Number(item.cantidad) > 0).length;
+
+        return {
+            totalItems: requestItems.length,
+            itemsWithQuantity,
+        };
+    }, [requestItems]);
+
     const getSupplyById = (supplyId) => {
         return supplies.find((supply) => String(supply.id) === String(supplyId)) || null;
     };
@@ -114,15 +128,27 @@ export default function PedidosInsumosPage() {
         )));
     };
 
-    const addRequestItem = () => {
-        setRequestItems((currentItems) => [...currentItems, createEmptyRequestItem()]);
+    const handleAddSupplyToRequest = (supplyId) => {
+        if (!supplyId) {
+            setSupplyPickerValue('');
+            return;
+        }
+
+        if (selectedSupplyIds.includes(String(supplyId))) {
+            setError('Ese insumo ya fue agregado a la lista del pedido.');
+            setFeedback(null);
+            setSupplyPickerValue('');
+            return;
+        }
+
+        setRequestItems((currentItems) => [...currentItems, createRequestItem(String(supplyId))]);
+        setSupplyPickerValue('');
+        setError('');
+        setFeedback(null);
     };
 
     const removeRequestItem = (localId) => {
-        setRequestItems((currentItems) => {
-            const nextItems = currentItems.filter((item) => item.localId !== localId);
-            return nextItems.length > 0 ? nextItems : [createEmptyRequestItem()];
-        });
+        setRequestItems((currentItems) => currentItems.filter((item) => item.localId !== localId));
     };
 
     const buildPayloadItems = () => {
@@ -202,7 +228,8 @@ export default function PedidosInsumosPage() {
             }
 
             localStorage.removeItem(getDraftStorageKey(currentUser.id));
-            setRequestItems([createEmptyRequestItem()]);
+            setRequestItems([]);
+            setSupplyPickerValue('');
             setSelectedServiceId('');
             setNotes('');
             setFeedback({ type: 'success', text: 'Pedido guardado correctamente.' });
@@ -260,18 +287,71 @@ export default function PedidosInsumosPage() {
                             <div>
                                 <label style={{ marginBottom: 0 }}>Insumos solicitados</label>
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                    Seleccioná los insumos y definí la cantidad a pedir.
+                                    Seleccioná un insumo desde el desplegable y se agregará a la lista del pedido.
                                 </p>
-                            </div>
-                            <div className="page-header-actions">
-                                <button type="button" className="btn btn-secondary" onClick={addRequestItem}>
-                                    + Agregar insumo
-                                </button>
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gap: '0.85rem' }}>
-                            {requestItems.map((item, index) => {
+                        <select
+                            value={supplyPickerValue}
+                            onChange={(e) => {
+                                const selectedValue = e.target.value;
+                                setSupplyPickerValue(selectedValue);
+                                handleAddSupplyToRequest(selectedValue);
+                            }}
+                            disabled={loading || availableSuppliesToAdd.length === 0}
+                        >
+                            <option value="">
+                                {loading
+                                    ? 'Cargando insumos...'
+                                    : availableSuppliesToAdd.length === 0
+                                        ? 'Ya agregaste todos los insumos disponibles'
+                                        : 'Seleccioná un insumo para agregarlo'}
+                            </option>
+                            {availableSuppliesToAdd.map((supply) => (
+                                <option key={supply.id} value={supply.id}>
+                                    {supply.nombre}
+                                </option>
+                            ))}
+                        </select>
+
+                        <div style={{ display: 'grid', gap: '0.85rem', marginTop: '1rem', maxHeight: '420px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                            <div
+                                style={{
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: '0.9rem 1rem',
+                                    background: 'var(--color-surface)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    gap: '1rem',
+                                    flexWrap: 'wrap'
+                                }}
+                            >
+                                <div>
+                                    <strong>Subtotal actual</strong>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                        {requestSummary.totalItems === 0
+                                            ? 'Todavía no agregaste insumos.'
+                                            : `${requestSummary.totalItems} insumo(s) en la lista para seguir editando.`}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    <span className="badge badge-secondary">
+                                        {requestSummary.totalItems} agregado(s)
+                                    </span>
+                                    <span className={`badge ${requestSummary.itemsWithQuantity > 0 ? 'badge-success' : 'badge-warning'}`}>
+                                        {requestSummary.itemsWithQuantity} con cantidad
+                                    </span>
+                                </div>
+                            </div>
+
+                            {requestItems.length === 0 ? (
+                                <div className="placeholder-field">
+                                    Todavía no agregaste insumos al pedido.
+                                </div>
+                            ) : requestItems.map((item, index) => {
                                 const selectedSupply = getSupplyById(item.supply_id);
 
                                 return (
@@ -287,33 +367,16 @@ export default function PedidosInsumosPage() {
                                         }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-                                            <strong>Insumo #{index + 1}</strong>
+                                            <strong>{selectedSupply?.nombre || `Insumo #${index + 1}`}</strong>
                                             <button
                                                 type="button"
                                                 className="btn btn-secondary"
                                                 onClick={() => removeRequestItem(item.localId)}
-                                                disabled={requestItems.length === 1}
                                                 style={{ color: 'var(--error)' }}
                                             >
                                                 Quitar
                                             </button>
                                         </div>
-
-                                        <select
-                                            value={item.supply_id}
-                                            onChange={(e) => updateRequestItem(item.localId, 'supply_id', e.target.value)}
-                                        >
-                                            <option value="">Seleccioná un insumo</option>
-                                            {supplies.map((supply) => {
-                                                const alreadySelectedElsewhere = selectedSupplyIds.includes(String(supply.id)) && String(supply.id) !== item.supply_id;
-
-                                                return (
-                                                    <option key={supply.id} value={supply.id} disabled={alreadySelectedElsewhere}>
-                                                        {supply.nombre}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
 
                                         <div style={{ display: 'grid', gap: '0.5rem' }}>
                                             <label style={{ marginBottom: 0 }}>Cantidad</label>
