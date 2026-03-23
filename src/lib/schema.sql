@@ -115,7 +115,10 @@ CREATE TABLE supply_requests (
   supervisor_id INTEGER REFERENCES supervisors(id),
   service_id INTEGER REFERENCES services(id),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  notas TEXT
+  notas TEXT,
+  status TEXT NOT NULL DEFAULT 'pendiente',
+  completed_by TEXT,
+  completed_at DATETIME
 );
 
 -- ★ NUEVO: Items del relevamiento

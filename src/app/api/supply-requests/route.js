@@ -1,7 +1,10 @@
 import { db } from '@/lib/db';
+import { ensureSupplyRequestSchema } from '@/lib/supply-requests';
 
 export async function GET(req) {
     try {
+        await ensureSupplyRequestSchema();
+
         const { searchParams } = new URL(req.url);
         const requestId = searchParams.get('request_id');
         const supervisorId = searchParams.get('supervisor_id');
@@ -9,6 +12,7 @@ export async function GET(req) {
         const date = searchParams.get('date');
         const startDate = searchParams.get('start_date');
         const endDate = searchParams.get('end_date');
+        const status = searchParams.get('status');
 
         let query = `
       SELECT sr.*, s.name as service_name, s.address as service_address,
@@ -44,6 +48,10 @@ export async function GET(req) {
             conditions.push(`date(datetime(sr.created_at, '-3 hours')) <= ?`);
             args.push(endDate);
         }
+        if (status) {
+            conditions.push('sr.status = ?');
+            args.push(status);
+        }
 
         if (conditions.length > 0) {
             query += ` WHERE ${conditions.join(' AND ')}`;
@@ -74,6 +82,8 @@ export async function GET(req) {
 
 export async function POST(req) {
     try {
+        await ensureSupplyRequestSchema();
+
         const { supervisor_id, service_id, notas, items } = await req.json();
 
         if (!supervisor_id || !service_id) {
@@ -107,5 +117,40 @@ export async function POST(req) {
     } catch (error) {
         console.error('Error creating supply request:', error);
         return Response.json({ error: 'Failed to create request' }, { status: 500 });
+    }
+}
+
+export async function PATCH(req) {
+    try {
+        await ensureSupplyRequestSchema();
+
+        const { request_id, status, completed_by } = await req.json();
+
+        if (!request_id) {
+            return Response.json({ error: 'request_id es requerido.' }, { status: 400 });
+        }
+
+        if (!['pendiente', 'ok'].includes(status)) {
+            return Response.json({ error: 'Estado inválido.' }, { status: 400 });
+        }
+
+        await db.execute({
+            sql: `UPDATE supply_requests
+                  SET status = ?,
+                      completed_by = CASE WHEN ? = 'ok' THEN ? ELSE NULL END,
+                      completed_at = CASE WHEN ? = 'ok' THEN CURRENT_TIMESTAMP ELSE NULL END
+                  WHERE id = ?`,
+            args: [status, status, completed_by || null, status, request_id]
+        });
+
+        const { rows } = await db.execute({
+            sql: 'SELECT id, status, completed_by, completed_at FROM supply_requests WHERE id = ?',
+            args: [request_id]
+        });
+
+        return Response.json(rows[0]);
+    } catch (error) {
+        console.error('Error updating supply request status:', error);
+        return Response.json({ error: 'Failed to update request status' }, { status: 500 });
     }
 }

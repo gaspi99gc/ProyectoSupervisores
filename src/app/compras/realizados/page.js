@@ -3,12 +3,13 @@
 import MainLayout from '@/components/MainLayout';
 import PurchasesRequestsView from '@/components/PurchasesRequestsView';
 
-export default function ComprasPage() {
+export default function ComprasRealizadosPage() {
     return (
         <MainLayout>
             <PurchasesRequestsView
-                title="Compras"
-                description="Recepción y seguimiento de pedidos de insumos enviados por supervisores"
+                title="Pedidos Realizados"
+                description="Pedidos marcados como OK desde Compras"
+                fixedStatus="ok"
             />
         </MainLayout>
     );

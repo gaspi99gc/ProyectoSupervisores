@@ -701,6 +701,24 @@ label {
   margin: 0 auto;
 }
 
+.panel-max-wide {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.purchases-filters-card {
+  max-width: 920px;
+}
+
+.purchases-table-wrap {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.purchases-filters-grid {
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+}
+
 .supervisor-home-view {
   min-height: calc(100vh - 8rem);
   display: flex;
@@ -968,7 +986,8 @@ label {
   }
 
   .employee-form-grid,
-  .relevamiento-supplies-grid {
+  .relevamiento-supplies-grid,
+  .purchases-filters-grid {
     grid-template-columns: 1fr;
   }
 
