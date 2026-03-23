@@ -707,7 +707,7 @@ label {
 }
 
 .purchases-filters-card {
-  max-width: 1080px;
+  max-width: 1040px;
   padding: 1.1rem 1.25rem !important;
 }
 
@@ -719,6 +719,23 @@ label {
 .purchases-filters-grid {
   grid-template-columns: repeat(5, minmax(150px, 1fr));
   gap: 0.85rem;
+}
+
+.purchases-date-range {
+  margin-bottom: 0.85rem;
+}
+
+.purchases-date-range-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.purchases-quick-filters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.65rem;
 }
 
 .supervisor-home-view {
@@ -990,6 +1007,10 @@ label {
   .employee-form-grid,
   .relevamiento-supplies-grid,
   .purchases-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .purchases-date-range-inputs {
     grid-template-columns: 1fr;
   }
 

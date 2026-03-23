@@ -2,21 +2,46 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { formatArgentinaDateTime, getArgentinaDateStamp } from '@/lib/datetime';
+import { formatArgentinaDateTime, getArgentinaDateStamp, parseAppDate } from '@/lib/datetime';
+
+const REQUEST_STATUS_OPTIONS = [
+    { value: 'activos', label: 'Activos' },
+    { value: 'todos', label: 'Todos' },
+    { value: 'pendiente', label: 'Pendiente' },
+    { value: 'en_gestion', label: 'En gestión' },
+    { value: 'pedido_proveedor', label: 'Pedido al proveedor' },
+    { value: 'recibido', label: 'Recibido' },
+    { value: 'cerrado', label: 'Cerrado' },
+];
+
+const EDITABLE_STATUS_OPTIONS = REQUEST_STATUS_OPTIONS.filter((option) => !['activos', 'todos'].includes(option.value));
+
+function getStatusLabel(status) {
+    return REQUEST_STATUS_OPTIONS.find((option) => option.value === status)?.label || 'Pendiente';
+}
+
+function getStatusBadgeClass(status) {
+    if (status === 'cerrado') return 'badge-success';
+    if (status === 'recibido') return 'badge-secondary';
+    if (status === 'pedido_proveedor') return 'badge-warning';
+    if (status === 'en_gestion') return 'badge-warning';
+    return 'badge-warning';
+}
 
 function buildRequestsExportRows(requests) {
     return requests.flatMap((request) => {
         const baseRow = {
             'Pedido ID': request.id,
-            Estado: request.status === 'ok' ? 'OK' : 'Pendiente',
+            Estado: getStatusLabel(request.status),
+            Urgencia: request.urgent ? 'Urgente' : 'Normal',
+            Proveedor: request.provider_name || '',
             'Fecha y hora': formatArgentinaDateTime(request.created_at),
             Supervisor: `${request.supervisor_surname}, ${request.supervisor_name}`,
             DNI: request.supervisor_dni,
             Servicio: request.service_name,
-            Direccion: request.service_address || 'Sin direccion cargada',
-            'Completado por': request.completed_by || '',
-            'Fecha OK': request.completed_at ? formatArgentinaDateTime(request.completed_at) : '',
             Notas: request.notas || '',
+            'Completado por': request.completed_by || '',
+            'Fecha cierre': request.completed_at ? formatArgentinaDateTime(request.completed_at) : '',
         };
 
         if (!Array.isArray(request.items) || request.items.length === 0) {
@@ -64,11 +89,12 @@ async function exportRequestsPdf(requests, title, fileName) {
         head: [[
             'Pedido ID',
             'Estado',
+            'Urgencia',
+            'Proveedor',
             'Fecha y hora',
             'Supervisor',
             'DNI',
             'Servicio',
-            'Direccion',
             'Insumo',
             'Cantidad',
             'Unidad',
@@ -77,11 +103,12 @@ async function exportRequestsPdf(requests, title, fileName) {
         body: rows.map((row) => ([
             row['Pedido ID'],
             row.Estado,
+            row.Urgencia,
+            row.Proveedor,
             row['Fecha y hora'],
             row.Supervisor,
             row.DNI,
             row.Servicio,
-            row.Direccion,
             row.Insumo,
             row.Cantidad,
             row.Unidad,
@@ -101,46 +128,85 @@ async function exportRequestsPdf(requests, title, fileName) {
         alternateRowStyles: {
             fillColor: [248, 250, 252]
         },
-        columnStyles: {
-            0: { cellWidth: 52 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 96 },
-            3: { cellWidth: 100 },
-            4: { cellWidth: 70 },
-            5: { cellWidth: 90 },
-            6: { cellWidth: 180 },
-            7: { cellWidth: 95 },
-            8: { cellWidth: 58 },
-            9: { cellWidth: 58 },
-            10: { cellWidth: 90 },
-        },
-        margin: { left: 32, right: 32, bottom: 32 }
+        margin: { left: 28, right: 28, bottom: 32 }
     });
 
     doc.save(`${fileName}_${getArgentinaDateStamp()}.pdf`);
 }
 
-export default function PurchasesRequestsView({ title, description, fixedStatus = '' }) {
+function getCurrentArgentinaDate() {
+    return getArgentinaDateStamp(new Date());
+}
+
+function shiftArgentinaDate(dateStamp, dayOffset) {
+    const baseDate = parseAppDate(dateStamp);
+    baseDate.setUTCDate(baseDate.getUTCDate() + dayOffset);
+    return getArgentinaDateStamp(baseDate);
+}
+
+function getQuickDateRange(mode) {
+    const today = getCurrentArgentinaDate();
+
+    if (mode === 'today') {
+        return { startDate: today, endDate: today };
+    }
+
+    const reference = parseAppDate(today);
+
+    if (mode === 'week') {
+        const day = reference.getUTCDay();
+        const diffToMonday = day === 0 ? -6 : 1 - day;
+        reference.setUTCDate(reference.getUTCDate() + diffToMonday);
+        return {
+            startDate: getArgentinaDateStamp(reference),
+            endDate: today,
+        };
+    }
+
+    reference.setUTCDate(1);
+    return {
+        startDate: getArgentinaDateStamp(reference),
+        endDate: today,
+    };
+}
+
+export default function PurchasesRequestsView({
+    title,
+    description,
+    defaultStatusFilter = 'activos',
+    allowStatusEditing = true,
+}) {
     const [currentUser, setCurrentUser] = useState(null);
     const [requests, setRequests] = useState([]);
+    const [providers, setProviders] = useState([]);
     const [services, setServices] = useState([]);
     const [supervisors, setSupervisors] = useState([]);
     const [filters, setFilters] = useState({
-        date: '',
         startDate: '',
         endDate: '',
+        status: defaultStatusFilter,
+        urgency: 'todos',
+        providerId: '',
         serviceId: '',
         supervisorId: '',
     });
     const [loading, setLoading] = useState(true);
+    const [meta, setMeta] = useState({ totalCount: 0 });
     const [updatingRequestId, setUpdatingRequestId] = useState(null);
     const [error, setError] = useState('');
 
     const activeFilterCount = useMemo(() => {
-        return Object.values(filters).filter(Boolean).length;
-    }, [filters]);
+        return Object.entries(filters).filter(([key, value]) => {
+            if (!value) return false;
+            if (key === 'status' && value === defaultStatusFilter) return false;
+            if (key === 'urgency' && value === 'todos') return false;
+            return true;
+        }).length;
+    }, [filters, defaultStatusFilter]);
 
-    const canEditStatus = !fixedStatus;
+    useEffect(() => {
+        setFilters((current) => ({ ...current, status: defaultStatusFilter }));
+    }, [defaultStatusFilter]);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('currentUser');
@@ -152,18 +218,22 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
     useEffect(() => {
         async function loadCatalogs() {
             try {
-                const [servicesResponse, supervisorsResponse] = await Promise.all([
+                const [providersResponse, servicesResponse, supervisorsResponse] = await Promise.all([
+                    fetch('/api/providers'),
                     fetch('/api/services'),
                     fetch('/api/supervisors')
                 ]);
 
+                const providersData = await providersResponse.json().catch(() => ([]));
                 const servicesData = await servicesResponse.json().catch(() => ([]));
                 const supervisorsData = await supervisorsResponse.json().catch(() => ([]));
 
+                if (providersResponse.ok) {
+                    setProviders(Array.isArray(providersData) ? providersData : []);
+                }
                 if (servicesResponse.ok) {
                     setServices(Array.isArray(servicesData) ? servicesData : []);
                 }
-
                 if (supervisorsResponse.ok) {
                     setSupervisors(Array.isArray(supervisorsData) ? supervisorsData : []);
                 }
@@ -182,22 +252,25 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                 setError('');
 
                 const query = new URLSearchParams();
+                query.set('include_meta', 'true');
 
-                if (filters.date) query.set('date', filters.date);
                 if (filters.startDate) query.set('start_date', filters.startDate);
                 if (filters.endDate) query.set('end_date', filters.endDate);
+                if (filters.status) query.set('status', filters.status);
+                if (filters.urgency) query.set('urgency', filters.urgency);
+                if (filters.providerId) query.set('provider_id', filters.providerId);
                 if (filters.serviceId) query.set('service_id', filters.serviceId);
                 if (filters.supervisorId) query.set('supervisor_id', filters.supervisorId);
-                if (fixedStatus) query.set('status', fixedStatus);
 
                 const response = await fetch(`/api/supply-requests?${query.toString()}`);
-                const data = await response.json().catch(() => ([]));
+                const data = await response.json().catch(() => ({ requests: [], totalCount: 0 }));
 
                 if (!response.ok) {
                     throw new Error(data.error || 'No se pudieron cargar los pedidos.');
                 }
 
-                setRequests(Array.isArray(data) ? data : []);
+                setRequests(Array.isArray(data.requests) ? data.requests : []);
+                setMeta({ totalCount: Number(data.totalCount || 0) });
             } catch (loadError) {
                 setError(loadError.message || 'No se pudieron cargar los pedidos.');
             } finally {
@@ -206,7 +279,7 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
         }
 
         loadRequests();
-    }, [filters, fixedStatus]);
+    }, [filters]);
 
     const updateFilter = (field, value) => {
         setFilters((current) => ({ ...current, [field]: value }));
@@ -214,12 +287,23 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
 
     const clearFilters = () => {
         setFilters({
-            date: '',
             startDate: '',
             endDate: '',
+            status: defaultStatusFilter,
+            urgency: 'todos',
+            providerId: '',
             serviceId: '',
             supervisorId: '',
         });
+    };
+
+    const applyQuickDateRange = (mode) => {
+        const range = getQuickDateRange(mode);
+        setFilters((current) => ({
+            ...current,
+            startDate: range.startDate,
+            endDate: range.endDate,
+        }));
     };
 
     const exportRequests = (exportedRequests, filePrefix) => {
@@ -237,53 +321,77 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
 
     const getItemsSummary = (request) => {
         const itemCount = Array.isArray(request.items) ? request.items.length : 0;
-
-        if (itemCount === 0) {
-            return 'Sin insumos';
-        }
-
+        if (itemCount === 0) return 'Sin insumos';
         return `${itemCount} insumo(s) cargado(s)`;
     };
 
-    const handleToggleStatus = async (request, checked) => {
+    const updateRequestRecord = async (requestId, payload) => {
+        const response = await fetch('/api/supply-requests', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_id: requestId, ...payload })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(data.error || 'No se pudo actualizar el pedido.');
+        }
+
+        return data;
+    };
+
+    const handleStatusChange = async (request, nextStatus) => {
         try {
             setUpdatingRequestId(request.id);
             setError('');
 
-            const response = await fetch('/api/supply-requests', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    request_id: request.id,
-                    status: checked ? 'ok' : 'pendiente',
-                    completed_by: checked ? (currentUser?.dni || currentUser?.name || 'compras') : null,
-                })
+            const updated = await updateRequestRecord(request.id, {
+                status: nextStatus,
+                provider_id: request.provider_id || null,
+                completed_by: nextStatus === 'cerrado' ? (currentUser?.dni || currentUser?.name || 'compras') : null,
             });
 
-            const data = await response.json().catch(() => ({}));
-
-            if (!response.ok) {
-                throw new Error(data.error || 'No se pudo actualizar el estado del pedido.');
-            }
-
-            setRequests((currentRequests) => {
-                const updatedRequests = currentRequests.map((currentRequest) => (
-                    currentRequest.id === request.id
-                        ? {
-                            ...currentRequest,
-                            status: data.status,
-                            completed_by: data.completed_by,
-                            completed_at: data.completed_at,
-                        }
-                        : currentRequest
-                ));
-
-                return fixedStatus
-                    ? updatedRequests.filter((currentRequest) => currentRequest.status === fixedStatus)
-                    : updatedRequests;
-            });
+            setRequests((currentRequests) => currentRequests.map((currentRequest) => (
+                currentRequest.id === request.id
+                    ? {
+                        ...currentRequest,
+                        status: updated.status,
+                        completed_by: updated.completed_by,
+                        completed_at: updated.completed_at,
+                    }
+                    : currentRequest
+            )));
         } catch (updateError) {
             setError(updateError.message || 'No se pudo actualizar el estado del pedido.');
+        } finally {
+            setUpdatingRequestId(null);
+        }
+    };
+
+    const handleProviderChange = async (request, providerId) => {
+        try {
+            setUpdatingRequestId(request.id);
+            setError('');
+
+            const normalizedProviderId = providerId ? Number(providerId) : null;
+            const updated = await updateRequestRecord(request.id, {
+                status: request.status,
+                provider_id: normalizedProviderId,
+                completed_by: request.status === 'cerrado' ? (request.completed_by || currentUser?.dni || currentUser?.name || 'compras') : null,
+            });
+
+            setRequests((currentRequests) => currentRequests.map((currentRequest) => (
+                currentRequest.id === request.id
+                    ? {
+                        ...currentRequest,
+                        provider_id: normalizedProviderId,
+                        provider_name: updated.provider_name || '',
+                    }
+                    : currentRequest
+            )));
+        } catch (updateError) {
+            setError(updateError.message || 'No se pudo actualizar el proveedor del pedido.');
         } finally {
             setUpdatingRequestId(null);
         }
@@ -301,38 +409,65 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                         <button type="button" className="btn btn-secondary" onClick={clearFilters}>
                             Limpiar filtros
                         </button>
-                        <button type="button" className="btn btn-primary" onClick={() => exportRequests(requests, fixedStatus === 'ok' ? 'Pedidos_realizados' : 'Pedidos_filtrados')}>
+                        <button type="button" className="btn btn-primary" onClick={() => exportRequests(requests, defaultStatusFilter === 'cerrado' ? 'Pedidos_completos' : 'Pedidos_filtrados')}>
                             Excel
                         </button>
-                        <button type="button" className="btn btn-secondary" onClick={() => exportRequestsPdf(requests, title, fixedStatus === 'ok' ? 'Pedidos_realizados' : 'Pedidos_filtrados')}>
+                        <button type="button" className="btn btn-secondary" onClick={() => exportRequestsPdf(requests, title, defaultStatusFilter === 'cerrado' ? 'Pedidos_completos' : 'Pedidos_filtrados')}>
                             PDF
                         </button>
                     </div>
                 </div>
 
-                <div className="card purchases-filters-card" style={{ margin: '1.5rem auto 0' }}>
-                    <div className="page-header" style={{ marginBottom: '0.5rem' }}>
+                <div className="card purchases-filters-card" style={{ margin: '1rem auto 0' }}>
+                    <div className="page-header" style={{ marginBottom: '0.75rem' }}>
                         <div>
                             <h3>Filtros</h3>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <span className="badge badge-secondary">{activeFilterCount} filtro(s) activos</span>
-                            <span className="badge badge-success">{requests.length} pedido(s)</span>
+                            <span className="badge badge-success">Mostrando {requests.length} de {meta.totalCount}</span>
+                        </div>
+                    </div>
+
+                    <div className="purchases-date-range">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label>Fecha de carga</label>
+                            <div className="purchases-date-range-inputs">
+                                <input type="date" value={filters.startDate} onChange={(e) => updateFilter('startDate', e.target.value)} />
+                                <input type="date" value={filters.endDate} onChange={(e) => updateFilter('endDate', e.target.value)} />
+                            </div>
+                            <div className="purchases-quick-filters">
+                                <button type="button" className="btn btn-secondary" onClick={() => applyQuickDateRange('today')}>Hoy</button>
+                                <button type="button" className="btn btn-secondary" onClick={() => applyQuickDateRange('week')}>Esta semana</button>
+                                <button type="button" className="btn btn-secondary" onClick={() => applyQuickDateRange('month')}>Este mes</button>
+                            </div>
                         </div>
                     </div>
 
                     <div className="employee-form-grid purchases-filters-grid">
                         <div className="form-group">
-                            <label>Día cargado</label>
-                            <input type="date" value={filters.date} onChange={(e) => updateFilter('date', e.target.value)} />
+                            <label>Estado</label>
+                            <select value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
+                                {REQUEST_STATUS_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="form-group">
-                            <label>Desde</label>
-                            <input type="date" value={filters.startDate} onChange={(e) => updateFilter('startDate', e.target.value)} />
+                            <label>Urgencia</label>
+                            <select value={filters.urgency} onChange={(e) => updateFilter('urgency', e.target.value)}>
+                                <option value="todos">Todos</option>
+                                <option value="solo_urgentes">Solo urgentes</option>
+                            </select>
                         </div>
                         <div className="form-group">
-                            <label>Hasta</label>
-                            <input type="date" value={filters.endDate} onChange={(e) => updateFilter('endDate', e.target.value)} />
+                            <label>Proveedor</label>
+                            <select value={filters.providerId} onChange={(e) => updateFilter('providerId', e.target.value)}>
+                                <option value="">Todos los proveedores</option>
+                                {providers.map((provider) => (
+                                    <option key={provider.id} value={provider.id}>{provider.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="form-group">
                             <label>Servicio</label>
@@ -360,7 +495,7 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                 ) : error ? (
                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--error)', fontWeight: 600 }}>{error}</div>
                 ) : (
-                    <div className="table-container purchases-table-wrap" style={{ margin: '1.5rem' }}>
+                    <div className="table-container purchases-table-wrap" style={{ margin: '1rem' }}>
                         <table className="table">
                             <thead>
                                 <tr>
@@ -368,7 +503,9 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                                     <th>Supervisor</th>
                                     <th>Servicio</th>
                                     <th>Insumos</th>
+                                    <th>Urgencia</th>
                                     <th>Estado</th>
+                                    <th>Proveedor</th>
                                     <th>Notas</th>
                                     <th style={{ textAlign: 'right' }}>Acciones</th>
                                 </tr>
@@ -381,9 +518,7 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                                             <strong>{request.supervisor_surname}, {request.supervisor_name}</strong>
                                             <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>DNI: {request.supervisor_dni}</div>
                                         </td>
-                                        <td>
-                                            <strong>{request.service_name}</strong>
-                                        </td>
+                                        <td><strong>{request.service_name}</strong></td>
                                         <td>
                                             <strong>{getItemsSummary(request)}</strong>
                                             <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
@@ -391,29 +526,53 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                                             </div>
                                         </td>
                                         <td>
-                                            <span className={`badge ${request.status === 'ok' ? 'badge-success' : 'badge-warning'}`}>
-                                                {request.status === 'ok' ? 'OK' : 'Pendiente'}
+                                            <span className={`badge ${request.urgent ? 'badge-danger' : 'badge-secondary'}`}>
+                                                {request.urgent ? 'Urgente' : 'Normal'}
                                             </span>
+                                        </td>
+                                        <td>
+                                            {allowStatusEditing ? (
+                                                <div style={{ display: 'grid', gap: '0.35rem' }}>
+                                                    <select
+                                                        value={request.status}
+                                                        disabled={updatingRequestId === request.id}
+                                                        onChange={(e) => handleStatusChange(request, e.target.value)}
+                                                    >
+                                                        {EDITABLE_STATUS_OPTIONS.map((option) => (
+                                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ) : (
+                                                <span className={`badge ${getStatusBadgeClass(request.status)}`}>
+                                                    {getStatusLabel(request.status)}
+                                                </span>
+                                            )}
                                             {request.completed_at ? (
                                                 <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
                                                     {request.completed_by || 'Compras'} - {formatArgentinaDateTime(request.completed_at)}
                                                 </div>
                                             ) : null}
                                         </td>
+                                        <td>
+                                            {allowStatusEditing ? (
+                                                <select
+                                                    value={request.provider_id || ''}
+                                                    disabled={updatingRequestId === request.id}
+                                                    onChange={(e) => handleProviderChange(request, e.target.value)}
+                                                >
+                                                    <option value="">Sin proveedor</option>
+                                                    {providers.map((provider) => (
+                                                        <option key={provider.id} value={provider.id}>{provider.name}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                request.provider_name || 'Sin proveedor'
+                                            )}
+                                        </td>
                                         <td>{request.notas || 'Sin notas'}</td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div className="table-action-group" style={{ alignItems: 'center', justifyContent: 'flex-end' }}>
-                                                {canEditStatus ? (
-                                                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontWeight: 600 }}>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={request.status === 'ok'}
-                                                            disabled={updatingRequestId === request.id}
-                                                            onChange={(event) => handleToggleStatus(request, event.target.checked)}
-                                                        />
-                                                        OK
-                                                    </label>
-                                                ) : null}
                                                 <button type="button" className="btn btn-secondary" onClick={() => exportRequests([request], `Pedido_${request.id}`)}>
                                                     Excel
                                                 </button>
@@ -425,7 +584,7 @@ export default function PurchasesRequestsView({ title, description, fixedStatus 
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                        <td colSpan="9" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                                             No hay pedidos que coincidan con los filtros actuales.
                                         </td>
                                     </tr>

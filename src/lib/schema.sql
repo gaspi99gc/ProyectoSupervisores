@@ -109,6 +109,13 @@ CREATE TABLE supplies (
   activo BOOLEAN DEFAULT 1
 );
 
+-- Proveedores registrados para compras
+CREATE TABLE providers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  active BOOLEAN DEFAULT 1
+);
+
 -- ★ NUEVO: Relevamientos (pedidos semanales)
 CREATE TABLE supply_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +124,8 @@ CREATE TABLE supply_requests (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   notas TEXT,
   status TEXT NOT NULL DEFAULT 'pendiente',
+  urgent BOOLEAN DEFAULT 0,
+  provider_id INTEGER REFERENCES providers(id),
   completed_by TEXT,
   completed_at DATETIME
 );

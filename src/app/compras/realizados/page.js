@@ -9,7 +9,8 @@ export default function ComprasRealizadosPage() {
             <PurchasesRequestsView
                 title="Pedidos Completos"
                 description="Pedidos marcados como OK desde Compras"
-                fixedStatus="ok"
+                defaultStatusFilter="cerrado"
+                allowStatusEditing={false}
             />
         </MainLayout>
     );

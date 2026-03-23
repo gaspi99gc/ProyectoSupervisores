@@ -9,6 +9,8 @@ export default function ComprasPage() {
             <PurchasesRequestsView
                 title="Compras"
                 description="Recepción y seguimiento de pedidos de insumos enviados por supervisores"
+                defaultStatusFilter="activos"
+                allowStatusEditing
             />
         </MainLayout>
     );
