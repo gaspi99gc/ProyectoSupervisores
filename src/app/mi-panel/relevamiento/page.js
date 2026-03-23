@@ -98,18 +98,14 @@ export default function PedidosInsumosPage() {
         loadInitialData();
     }, []);
 
-    const selectedService = useMemo(() => {
-        return services.find((service) => String(service.id) === selectedServiceId) || null;
-    }, [selectedServiceId, services]);
-
     const selectedSupplyIds = useMemo(() => {
         return requestItems
             .map((item) => item.supply_id)
             .filter(Boolean);
     }, [requestItems]);
 
-    const availableSuppliesToAdd = useMemo(() => {
-        return supplies.filter((supply) => !selectedSupplyIds.includes(String(supply.id)));
+    const allSuppliesSelected = useMemo(() => {
+        return supplies.length > 0 && selectedSupplyIds.length >= supplies.length;
     }, [selectedSupplyIds, supplies]);
 
     const requestSummary = useMemo(() => {
@@ -289,10 +285,6 @@ export default function PedidosInsumosPage() {
                         </div>
                     </header>
 
-                    <div className="placeholder-field" style={{ marginBottom: '1.5rem' }}>
-                        Este pedido queda guardado automáticamente como borrador hasta que lo envíes. Si salís y volvés a entrar, retomás el mismo pedido en proceso.
-                    </div>
-
                     <div className="form-group" style={{ marginBottom: '2rem' }}>
                         <label>Ubicacion</label>
                         <select
@@ -313,23 +305,12 @@ export default function PedidosInsumosPage() {
                                 </option>
                             ))}
                         </select>
-                        {error ? (
-                            <p style={{ color: 'var(--error)', fontSize: '0.9rem', marginTop: '0.5rem' }}>{error}</p>
-                        ) : null}
-                        {!error && selectedService ? (
-                            <div className="placeholder-field" style={{ marginTop: '0.75rem' }}>
-                                {selectedService.address || 'Servicio sin direccion cargada'}
-                            </div>
-                        ) : null}
                     </div>
 
                     <div className="form-group" style={{ marginBottom: '2rem' }}>
                         <div className="page-header" style={{ marginBottom: '1rem' }}>
                             <div>
                                 <label style={{ marginBottom: 0 }}>Insumos solicitados</label>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                                    Seleccioná un insumo desde el desplegable y se agregará a la lista del pedido.
-                                </p>
                             </div>
                         </div>
 
@@ -341,20 +322,24 @@ export default function PedidosInsumosPage() {
                                 setSupplyPickerValue(selectedValue);
                                 handleAddSupplyToRequest(selectedValue);
                             }}
-                            disabled={loading || availableSuppliesToAdd.length === 0}
+                            disabled={loading || supplies.length === 0}
                         >
                             <option value="">
                                 {loading
                                     ? 'Cargando insumos...'
-                                    : availableSuppliesToAdd.length === 0
+                                    : allSuppliesSelected
                                         ? 'Ya agregaste todos los insumos disponibles'
                                         : 'Seleccioná un insumo para agregarlo'}
                             </option>
-                            {availableSuppliesToAdd.map((supply) => (
-                                <option key={supply.id} value={supply.id}>
-                                    {supply.nombre}
-                                </option>
-                            ))}
+                            {supplies.map((supply) => {
+                                const alreadyInRequest = selectedSupplyIds.includes(String(supply.id));
+
+                                return (
+                                    <option key={supply.id} value={supply.id} disabled={alreadyInRequest}>
+                                        {alreadyInRequest ? `${supply.nombre} - ya en el pedido` : supply.nombre}
+                                    </option>
+                                );
+                            })}
                         </select>
 
                         <div style={{ display: 'grid', gap: '0.85rem', marginTop: '1rem', maxHeight: '420px', overflowY: 'auto', paddingRight: '0.25rem' }}>
@@ -389,11 +374,7 @@ export default function PedidosInsumosPage() {
                                 </div>
                             </div>
 
-                            {requestItems.length === 0 ? (
-                                <div className="placeholder-field">
-                                    Todavía no agregaste insumos al pedido.
-                                </div>
-                            ) : requestItems.map((item, index) => {
+                            {requestItems.length === 0 ? null : requestItems.map((item, index) => {
                                 const selectedSupply = getSupplyById(item.supply_id);
 
                                 return (
@@ -439,6 +420,19 @@ export default function PedidosInsumosPage() {
                         </div>
                     </div>
 
+                    {error ? (
+                        <div style={{
+                            marginBottom: '1rem',
+                            padding: '0.85rem 1rem',
+                            borderRadius: 'var(--radius-sm)',
+                            background: '#FEE2E2',
+                            color: '#991B1B',
+                            fontWeight: 600
+                        }}>
+                            {error}
+                        </div>
+                    ) : null}
+
                     <div className="form-group" style={{ marginBottom: '2rem' }}>
                         <label>Notas</label>
                         <textarea
@@ -459,19 +453,6 @@ export default function PedidosInsumosPage() {
                             fontWeight: 600
                         }}>
                             {feedback.text}
-                        </div>
-                    ) : null}
-
-                    {error ? (
-                        <div style={{
-                            marginBottom: '1rem',
-                            padding: '0.85rem 1rem',
-                            borderRadius: 'var(--radius-sm)',
-                            background: '#FEE2E2',
-                            color: '#991B1B',
-                            fontWeight: 600
-                        }}>
-                            {error}
                         </div>
                     ) : null}
 
