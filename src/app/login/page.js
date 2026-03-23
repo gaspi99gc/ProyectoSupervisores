@@ -19,6 +19,13 @@ export default function LoginScreen() {
             return;
         }
 
+        if (role === 'purchases') {
+            const user = { id: -10, name: 'Compras', surname: 'LASIA', dni: 'compras', role: 'purchases' };
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            router.push('/compras');
+            return;
+        }
+
         try {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
@@ -61,6 +68,8 @@ export default function LoginScreen() {
                 // Redirigir según rol
                 if (data.user.role === 'admin') {
                     router.push('/'); // Dashboard Admin
+                } else if (data.user.role === 'purchases') {
+                    router.push('/compras');
                 } else {
                     router.push('/mi-panel'); // Panel Supervisor
                 }
@@ -131,6 +140,14 @@ export default function LoginScreen() {
                             onClick={() => handleQuickAccess('admin')}
                         >
                             Entrar como Admin
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ width: '100%', padding: '0.8rem 1rem' }}
+                            onClick={() => handleQuickAccess('purchases')}
+                        >
+                            Entrar como Compras
                         </button>
                     </div>
                 </div>

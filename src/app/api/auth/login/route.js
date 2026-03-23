@@ -5,6 +5,8 @@ import { ensureSupervisorStatusRow } from '@/lib/supervisor-status';
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin1234';
+const PURCHASES_USERNAME = process.env.PURCHASES_USERNAME || 'compras';
+const PURCHASES_PASSWORD = process.env.PURCHASES_PASSWORD || 'compras1234';
 const DEMO_SUPERVISOR_USERNAME = 'supervisor';
 const DEMO_SUPERVISOR_PASSWORD = 'supervisor';
 
@@ -25,6 +27,15 @@ export async function POST(req) {
 
             const adminUser = { id: 0, name: 'Admin', surname: 'LASIA', dni: ADMIN_USERNAME, role: 'admin' };
             return Response.json({ user: adminUser });
+        }
+
+        if (loginUsername === PURCHASES_USERNAME) {
+            if (loginPassword !== PURCHASES_PASSWORD) {
+                return Response.json({ error: 'Usuario o contraseña incorrectos' }, { status: 401 });
+            }
+
+            const purchasesUser = { id: -10, name: 'Compras', surname: 'LASIA', dni: PURCHASES_USERNAME, role: 'purchases' };
+            return Response.json({ user: purchasesUser });
         }
 
         await ensureSupervisorAuthColumns();

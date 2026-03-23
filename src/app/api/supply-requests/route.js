@@ -3,11 +3,16 @@ import { db } from '@/lib/db';
 export async function GET(req) {
     try {
         const { searchParams } = new URL(req.url);
+        const requestId = searchParams.get('request_id');
         const supervisorId = searchParams.get('supervisor_id');
         const serviceId = searchParams.get('service_id');
+        const date = searchParams.get('date');
+        const startDate = searchParams.get('start_date');
+        const endDate = searchParams.get('end_date');
 
         let query = `
-      SELECT sr.*, s.name as service_name, sup.name as supervisor_name, sup.surname as supervisor_surname
+      SELECT sr.*, s.name as service_name, s.address as service_address,
+             sup.name as supervisor_name, sup.surname as supervisor_surname, sup.dni as supervisor_dni
       FROM supply_requests sr
       JOIN services s ON sr.service_id = s.id
       JOIN supervisors sup ON sr.supervisor_id = sup.id
@@ -15,6 +20,10 @@ export async function GET(req) {
         const conditions = [];
         const args = [];
 
+        if (requestId) {
+            conditions.push('sr.id = ?');
+            args.push(requestId);
+        }
         if (supervisorId) {
             conditions.push('sr.supervisor_id = ?');
             args.push(supervisorId);
@@ -22,6 +31,18 @@ export async function GET(req) {
         if (serviceId) {
             conditions.push('sr.service_id = ?');
             args.push(serviceId);
+        }
+        if (date) {
+            conditions.push(`date(datetime(sr.created_at, '-3 hours')) = ?`);
+            args.push(date);
+        }
+        if (startDate) {
+            conditions.push(`date(datetime(sr.created_at, '-3 hours')) >= ?`);
+            args.push(startDate);
+        }
+        if (endDate) {
+            conditions.push(`date(datetime(sr.created_at, '-3 hours')) <= ?`);
+            args.push(endDate);
         }
 
         if (conditions.length > 0) {

@@ -54,12 +54,14 @@ export default function MainLayout({ children }) {
 
     const getCurrentSectionLabel = () => {
         if (pathname === '/') return 'Dashboard';
+        if (pathname === '/compras') return 'Compras';
         if (pathname === '/rrhh' || pathname === '/periodo-prueba') return 'RRHH';
         if (pathname === '/supervisores') return 'Supervisores';
         if (pathname === '/presentismo-admin') return 'Presentismo';
         if (pathname === '/config') return 'Configuracion';
         if (pathname === '/mi-panel' || pathname === '/mi-panel/presentismo') return 'Presentismo';
         if (pathname === '/mi-panel/relevamiento') return 'Pedidos Insumos';
+        if (pathname === '/mi-panel/historico-pedidos') return 'Historico de Pedidos';
         return 'LASIA';
     };
 
@@ -108,6 +110,14 @@ export default function MainLayout({ children }) {
                                 </div>
                             </Link>
                         </>
+                    ) : currentUser.role === 'purchases' ? (
+                        <>
+                            <Link href="/compras">
+                                <div className={`menu-item ${pathname === '/compras' ? 'active' : ''}`}>
+                                    🛒 Compras
+                                </div>
+                            </Link>
+                        </>
                     ) : (
                         <>
                             <Link href="/mi-panel">
@@ -118,6 +128,11 @@ export default function MainLayout({ children }) {
                             <Link href="/mi-panel/relevamiento">
                                 <div className={`menu-item ${pathname === '/mi-panel/relevamiento' ? 'active' : ''}`}>
                                     📦 Pedidos Insumos
+                                </div>
+                            </Link>
+                            <Link href="/mi-panel/historico-pedidos">
+                                <div className={`menu-item ${pathname === '/mi-panel/historico-pedidos' ? 'active' : ''}`}>
+                                    🧾 Historico de Pedidos
                                 </div>
                             </Link>
                         </>
