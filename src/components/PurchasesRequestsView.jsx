@@ -175,7 +175,6 @@ export default function PurchasesRequestsView({
 }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [requests, setRequests] = useState([]);
-    const [providers, setProviders] = useState([]);
     const [services, setServices] = useState([]);
     const [supervisors, setSupervisors] = useState([]);
     const [filters, setFilters] = useState({
@@ -212,19 +211,14 @@ export default function PurchasesRequestsView({
     useEffect(() => {
         async function loadCatalogs() {
             try {
-                const [providersResponse, servicesResponse, supervisorsResponse] = await Promise.all([
-                    fetch('/api/providers'),
+                const [servicesResponse, supervisorsResponse] = await Promise.all([
                     fetch('/api/services'),
                     fetch('/api/supervisors')
                 ]);
 
-                const providersData = await providersResponse.json().catch(() => ([]));
                 const servicesData = await servicesResponse.json().catch(() => ([]));
                 const supervisorsData = await supervisorsResponse.json().catch(() => ([]));
 
-                if (providersResponse.ok) {
-                    setProviders(Array.isArray(providersData) ? providersData : []);
-                }
                 if (servicesResponse.ok) {
                     setServices(Array.isArray(servicesData) ? servicesData : []);
                 }
@@ -363,34 +357,6 @@ export default function PurchasesRequestsView({
         await handleStatusChange(request, 'cerrado');
     };
 
-    const handleProviderChange = async (request, providerId) => {
-        try {
-            setUpdatingRequestId(request.id);
-            setError('');
-
-            const normalizedProviderId = providerId ? Number(providerId) : null;
-            const updated = await updateRequestRecord(request.id, {
-                status: request.status,
-                provider_id: normalizedProviderId,
-                completed_by: request.status === 'cerrado' ? (request.completed_by || currentUser?.dni || currentUser?.name || 'compras') : null,
-            });
-
-            setRequests((currentRequests) => currentRequests.map((currentRequest) => (
-                currentRequest.id === request.id
-                    ? {
-                        ...currentRequest,
-                        provider_id: normalizedProviderId,
-                        provider_name: updated.provider_name || '',
-                    }
-                    : currentRequest
-            )));
-        } catch (updateError) {
-            setError(updateError.message || 'No se pudo actualizar el proveedor del pedido.');
-        } finally {
-            setUpdatingRequestId(null);
-        }
-    };
-
     return (
         <div className="panel-max-wide">
             <div className="card" style={{ padding: 0 }}>
@@ -484,7 +450,6 @@ export default function PurchasesRequestsView({
                                     <th>Servicio</th>
                                     <th>Insumos</th>
                                     <th>Estado</th>
-                                    <th>Proveedor</th>
                                     <th>Notas</th>
                                     <th style={{ textAlign: 'right' }}>Acciones</th>
                                 </tr>
@@ -495,7 +460,6 @@ export default function PurchasesRequestsView({
                                         <td>{formatArgentinaDateTime(request.created_at)}</td>
                                         <td>
                                             <strong>{request.supervisor_surname}, {request.supervisor_name}</strong>
-                                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>DNI: {request.supervisor_dni}</div>
                                         </td>
                                         <td><strong>{request.service_name}</strong></td>
                                         <td>
@@ -529,22 +493,6 @@ export default function PurchasesRequestsView({
                                                 </div>
                                             ) : null}
                                         </td>
-                                        <td>
-                                            {allowStatusEditing ? (
-                                                <select
-                                                    value={request.provider_id || ''}
-                                                    disabled={updatingRequestId === request.id}
-                                                    onChange={(e) => handleProviderChange(request, e.target.value)}
-                                                >
-                                                    <option value="">Sin proveedor</option>
-                                                    {providers.map((provider) => (
-                                                        <option key={provider.id} value={provider.id}>{provider.name}</option>
-                                                    ))}
-                                                </select>
-                                            ) : (
-                                                request.provider_name || 'Sin proveedor'
-                                            )}
-                                        </td>
                                         <td>{request.notas || 'Sin notas'}</td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div className="table-action-group" style={{ alignItems: 'center', justifyContent: 'flex-end' }}>
@@ -569,7 +517,7 @@ export default function PurchasesRequestsView({
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                                             No hay pedidos que coincidan con los filtros actuales.
                                         </td>
                                     </tr>
