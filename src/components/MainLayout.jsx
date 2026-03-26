@@ -55,6 +55,7 @@ export default function MainLayout({ children }) {
     const getCurrentSectionLabel = () => {
         if (pathname === '/') return 'Dashboard';
         if (pathname === '/compras') return 'Compras';
+        if (pathname === '/compras/servicios') return 'Servicios';
         if (pathname === '/compras/realizados') return 'Pedidos Completos';
         if (pathname === '/rrhh' || pathname === '/periodo-prueba') return 'RRHH';
         if (pathname === '/supervisores') return 'Supervisores';
@@ -116,6 +117,11 @@ export default function MainLayout({ children }) {
                             <Link href="/compras">
                                 <div className={`menu-item ${pathname === '/compras' ? 'active' : ''}`}>
                                     🛒 Compras
+                                </div>
+                            </Link>
+                            <Link href="/compras/servicios">
+                                <div className={`menu-item ${pathname === '/compras/servicios' ? 'active' : ''}`}>
+                                    📍 Servicios
                                 </div>
                             </Link>
                             <Link href="/compras/realizados">
