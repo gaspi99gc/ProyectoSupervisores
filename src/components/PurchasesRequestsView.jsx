@@ -9,7 +9,7 @@ const REQUEST_STATUS_OPTIONS = [
     { value: 'activos', label: 'Activos' },
     { value: 'todos', label: 'Todos' },
     { value: 'pendiente', label: 'Pendiente' },
-    { value: 'revisado', label: 'Enviado al proveedor' },
+    { value: 'revisado', label: 'Enviar al proveedor' },
     { value: 'cerrado', label: 'Cerrado' },
 ];
 
@@ -17,10 +17,30 @@ const EDITABLE_STATUS_OPTIONS = REQUEST_STATUS_OPTIONS.filter((option) => !['act
 
 function getStatusLabel(status) {
     if (status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') {
-        return 'Enviado al proveedor';
+        return 'Enviar al proveedor';
     }
 
     return REQUEST_STATUS_OPTIONS.find((option) => option.value === status)?.label || 'Pendiente';
+}
+
+function getPrimaryActionConfig(status) {
+    if (status === 'pendiente') {
+        return {
+            label: 'Enviar al proveedor',
+            color: '#f59e0b',
+            shadow: '0 4px 10px rgba(245, 158, 11, 0.28)',
+        };
+    }
+
+    if (status === 'revisado') {
+        return {
+            label: 'Recibido',
+            color: '#16a34a',
+            shadow: '0 4px 10px rgba(22, 163, 74, 0.28)',
+        };
+    }
+
+    return null;
 }
 
 function getStatusBadgeClass(status) {
@@ -44,14 +64,16 @@ function getStatusAlertConfig(status) {
         return {
             icon: 'success',
             title: 'Pedido cerrado',
+            iconColor: '#16a34a',
             confirmButtonColor: '#16a34a',
         };
     }
 
     if (status === 'revisado' || status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') {
         return {
-            icon: 'info',
+            icon: 'question',
             title: 'Pedido enviado al proveedor',
+            iconColor: '#0ea5e9',
             confirmButtonColor: '#0ea5e9',
         };
     }
@@ -59,6 +81,7 @@ function getStatusAlertConfig(status) {
     return {
         icon: 'warning',
         title: 'Pedido pendiente',
+        iconColor: '#f59e0b',
         confirmButtonColor: '#f59e0b',
     };
 }
@@ -403,6 +426,7 @@ export default function PurchasesRequestsView({
         await Swal.fire({
             title: alertConfig.title,
             icon: alertConfig.icon,
+            iconColor: alertConfig.iconColor,
             html: `
                 <div style="text-align:left; display:grid; gap:0.45rem; font-size:0.95rem;">
                     <div><strong>Pedido:</strong> #${escapeHtml(request.id)}</div>
@@ -568,16 +592,24 @@ export default function PurchasesRequestsView({
                                         <td>{request.notas || 'Sin notas'}</td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div className="table-action-group" style={{ alignItems: 'center', justifyContent: 'flex-end' }}>
-                                                {allowStatusEditing && request.status !== 'cerrado' ? (
-                                                    <button
-                                                        type="button"
-                                                        className="btn btn-primary"
-                                                        onClick={() => handlePrimaryStatusAction(request)}
-                                                        disabled={updatingRequestId === request.id}
-                                                    >
-                                                        {request.status === 'pendiente' ? 'Enviado a proveedor' : 'Recibido'}
-                                                    </button>
-                                                ) : null}
+                                                {(() => {
+                                                    const actionConfig = getPrimaryActionConfig(request.status);
+                                                    return allowStatusEditing && actionConfig ? (
+                                                        <button
+                                                            type="button"
+                                                            className="btn"
+                                                            onClick={() => handlePrimaryStatusAction(request)}
+                                                            disabled={updatingRequestId === request.id}
+                                                            style={{
+                                                                background: actionConfig.color,
+                                                                color: '#fff',
+                                                                boxShadow: actionConfig.shadow,
+                                                            }}
+                                                        >
+                                                            {actionConfig.label}
+                                                        </button>
+                                                    ) : null;
+                                                })()}
                                                 <button type="button" className="btn btn-secondary" onClick={() => exportRequests([request], `Pedido_${request.id}`)}>
                                                     Excel
                                                 </button>
