@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function MainLayout({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
@@ -73,10 +74,13 @@ export default function MainLayout({ children }) {
         <div className="app-wrapper">
             <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
                 <div className="sidebar-logo">
-                    <img
-                        src="/branding/logo-lasia-limpieza.svg"
+                    <Image
+                        src="/branding/logo-lasia-limpieza.png"
                         alt="LASIA Limpieza"
                         className="sidebar-logo-image"
+                        width={240}
+                        height={56}
+                        priority
                     />
                     <button
                         type="button"
