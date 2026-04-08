@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { formatArgentinaDateTime, getArgentinaDateStamp, parseAppDate } from '@/lib/datetime';
 
@@ -26,6 +27,16 @@ function getStatusBadgeClass(status) {
     if (status === 'cerrado') return 'badge-success';
     if (status === 'revisado' || status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') return 'badge-secondary';
     return 'badge-warning';
+}
+
+function escapeHtml(value) {
+    return value
+        ?.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;') || '';
 }
 
 function buildRequestsExportRows(requests) {
@@ -351,6 +362,32 @@ export default function PurchasesRequestsView({
         await handleStatusChange(request, 'cerrado');
     };
 
+    const handleShowRequestDetail = async (request) => {
+        const summaryItems = Array.isArray(request.items)
+            ? request.items.map((item) => `${item.nombre}: ${item.cantidad}`)
+            : [];
+
+        await Swal.fire({
+            title: 'Detalle del pedido',
+            icon: 'info',
+            html: `
+                <div style="text-align:left; display:grid; gap:0.45rem; font-size:0.95rem;">
+                    <div><strong>Pedido:</strong> #${escapeHtml(request.id)}</div>
+                    <div><strong>Servicio:</strong> ${escapeHtml(request.service_name || 'Sin servicio')}</div>
+                    <div><strong>Insumos:</strong></div>
+                    <ul style="margin:0; padding-left:1.15rem;">
+                        ${summaryItems.length > 0
+                ? summaryItems.map((line) => `<li>${escapeHtml(line)}</li>`).join('')
+                : '<li>Sin insumos</li>'}
+                    </ul>
+                    <div><strong>Notas:</strong> ${escapeHtml(request.notas || 'Sin notas')}</div>
+                </div>
+            `,
+            confirmButtonText: 'Entendido',
+            confirmButtonColor: '#0ea5e9',
+        });
+    };
+
     return (
         <div className="panel-max-wide">
             <div className="card" style={{ padding: 0 }}>
@@ -458,8 +495,15 @@ export default function PurchasesRequestsView({
                                         <td><strong>{request.service_name}</strong></td>
                                         <td>
                                             <strong>{getItemsSummary(request)}</strong>
-                                            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                                                Ver detalle completo en Excel o PDF
+                                            <div style={{ marginTop: '0.45rem' }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    onClick={() => handleShowRequestDetail(request)}
+                                                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.82rem' }}
+                                                >
+                                                    Ver detalle
+                                                </button>
                                             </div>
                                         </td>
                                         <td>
