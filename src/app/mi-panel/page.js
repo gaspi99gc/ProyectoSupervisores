@@ -6,6 +6,39 @@ import MainLayout from '@/components/MainLayout';
 
 const SERVICE_NEAR_DISTANCE_METERS = 200;
 
+function formatServiceAddress(address) {
+    const rawAddress = address?.toString().trim();
+
+    if (!rawAddress) {
+        return 'Servicio sin direccion cargada';
+    }
+
+    const segments = rawAddress
+        .split(',')
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+
+    if (segments.length === 0) {
+        return 'Servicio sin direccion cargada';
+    }
+
+    const streetSegment = segments[0];
+    const buenosAiresSegment = segments.find((segment, index) => {
+        if (index === 0) return false;
+        return segment.toLowerCase().includes('buenos aires');
+    });
+
+    if (buenosAiresSegment) {
+        return `${streetSegment}, ${buenosAiresSegment}`;
+    }
+
+    if (segments.length > 1) {
+        return `${streetSegment}, ${segments[1]}`;
+    }
+
+    return streetSegment;
+}
+
 function getDistanceInMeters(lat1, lng1, lat2, lng2) {
     const earthRadius = 6371e3;
     const phi1 = lat1 * Math.PI / 180;
@@ -256,7 +289,7 @@ export default function SupervisorHomePage() {
 
                         {selectedService ? (
                             <div className="placeholder-field" style={{ marginTop: '0.75rem' }}>
-                                {selectedService.address || 'Servicio sin direccion cargada'}
+                                {formatServiceAddress(selectedService.address)}
                             </div>
                         ) : null}
                     </div>
