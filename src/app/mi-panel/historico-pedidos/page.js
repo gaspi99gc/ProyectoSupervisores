@@ -87,7 +87,7 @@ export default function HistoricoPedidosPage() {
                                 </thead>
                                 <tbody>
                                     {requests.length > 0 ? requests.map((request) => (
-                                        <tr key={request.id}>
+                                        <tr key={request.id} className="historico-request-row">
                                             <td data-label="Fecha y hora">{formatArgentinaDateTime(request.created_at)}</td>
                                             <td data-label="Servicio">
                                                 <strong>{request.service_name}</strong>
@@ -101,7 +101,9 @@ export default function HistoricoPedidosPage() {
                                                     )) : 'Sin insumos'}
                                                 </div>
                                             </td>
-                                            <td data-label="Notas">{request.notas || 'Sin notas'}</td>
+                                            <td data-label="Notas" className="historico-notes-cell">
+                                                <div className="historico-notes-box">{request.notas || 'Sin notas'}</div>
+                                            </td>
                                         </tr>
                                     )) : (
                                         <tr className="historico-empty-row">

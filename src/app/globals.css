@@ -1201,6 +1201,7 @@ label {
     border-radius: 12px;
     background: var(--color-surface);
     overflow: hidden;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.07);
   }
 
   .historico-table td {
@@ -1227,6 +1228,17 @@ label {
 
   .historico-table .historico-items-list {
     gap: 0.25rem !important;
+  }
+
+  .historico-table .historico-notes-cell {
+    background: var(--color-muted-surface);
+  }
+
+  .historico-table .historico-notes-box {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.6rem 0.7rem;
+    background: var(--color-surface);
   }
 
   .historico-table .historico-empty-row td {
