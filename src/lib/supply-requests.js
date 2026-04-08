@@ -55,6 +55,7 @@ export async function ensureSupplyRequestSchema() {
     }
 
     await db.execute("UPDATE supply_requests SET status = 'cerrado' WHERE status = 'ok'");
+    await db.execute("UPDATE supply_requests SET status = 'revisado' WHERE status IN ('en_gestion', 'pedido_proveedor', 'recibido')");
 
     supplyRequestSchemaReady = true;
 }

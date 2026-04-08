@@ -8,23 +8,23 @@ const REQUEST_STATUS_OPTIONS = [
     { value: 'activos', label: 'Activos' },
     { value: 'todos', label: 'Todos' },
     { value: 'pendiente', label: 'Pendiente' },
-    { value: 'en_gestion', label: 'En gestión' },
-    { value: 'pedido_proveedor', label: 'Pedido al proveedor' },
-    { value: 'recibido', label: 'Recibido' },
+    { value: 'revisado', label: 'Revisado' },
     { value: 'cerrado', label: 'Cerrado' },
 ];
 
 const EDITABLE_STATUS_OPTIONS = REQUEST_STATUS_OPTIONS.filter((option) => !['activos', 'todos'].includes(option.value));
 
 function getStatusLabel(status) {
+    if (status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') {
+        return 'Revisado';
+    }
+
     return REQUEST_STATUS_OPTIONS.find((option) => option.value === status)?.label || 'Pendiente';
 }
 
 function getStatusBadgeClass(status) {
     if (status === 'cerrado') return 'badge-success';
-    if (status === 'recibido') return 'badge-secondary';
-    if (status === 'pedido_proveedor') return 'badge-warning';
-    if (status === 'en_gestion') return 'badge-warning';
+    if (status === 'revisado' || status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') return 'badge-secondary';
     return 'badge-warning';
 }
 

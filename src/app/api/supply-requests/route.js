@@ -1,12 +1,13 @@
 import { db } from '@/lib/db';
 import { ensureSupplyRequestSchema } from '@/lib/supply-requests';
 
-const ACTIVE_REQUEST_STATUSES = ['pendiente', 'en_gestion', 'pedido_proveedor', 'recibido'];
-const ALLOWED_REQUEST_STATUSES = ['pendiente', 'en_gestion', 'pedido_proveedor', 'recibido', 'cerrado'];
+const ACTIVE_REQUEST_STATUSES = ['pendiente', 'revisado'];
+const ALLOWED_REQUEST_STATUSES = ['pendiente', 'revisado', 'cerrado'];
 
 function normalizeStatusFilter(status) {
     if (!status) return '';
     if (status === 'ok') return 'cerrado';
+    if (status === 'en_gestion' || status === 'pedido_proveedor' || status === 'recibido') return 'revisado';
     return status;
 }
 
