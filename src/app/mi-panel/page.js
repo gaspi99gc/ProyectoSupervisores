@@ -62,6 +62,8 @@ export default function SupervisorHomePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState('');
+    const [biometricCount, setBiometricCount] = useState(0);
+    const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
     const selectedService = useMemo(() => {
         return services.find((service) => String(service.id) === selectedServiceId) || null;
@@ -158,6 +160,24 @@ export default function SupervisorHomePage() {
             cancelled = true;
         };
     }, []);
+
+    useEffect(() => {
+        if (!currentUser?.app_user_id) return;
+        const loadCount = async () => {
+            try {
+                const res = await fetch('/api/auth/webauthn/credentials-count', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ appUserId: currentUser.app_user_id }),
+                });
+                const data = await res.json().catch(() => ({ count: 0 }));
+                setBiometricCount(data.count || 0);
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        loadCount();
+    }, [currentUser?.app_user_id]);
 
     const buttonLabel = useMemo(() => {
         if (isLoading) return 'CARGANDO...';
@@ -263,6 +283,89 @@ export default function SupervisorHomePage() {
         }
     };
 
+    const handleRegisterBiometric = async () => {
+        if (!currentUser?.app_user_id) return;
+        setIsBiometricLoading(true);
+        try {
+            const resOpts = await fetch('/api/auth/webauthn/register-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appUserId: currentUser.app_user_id }),
+            });
+            const { options, error: optsError } = await resOpts.json();
+            if (optsError || !options) throw new Error(optsError || 'No se pudieron generar las opciones de registro');
+
+            const { startRegistration } = await import('@simplewebauthn/browser');
+            const credential = await startRegistration({ optionsJSON: options });
+
+            const resVerify = await fetch('/api/auth/webauthn/register-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appUserId: currentUser.app_user_id, credential }),
+            });
+            const verifyData = await resVerify.json();
+            if (!resVerify.ok || !verifyData.verified) {
+                throw new Error(verifyData.error || 'No se pudo registrar el dispositivo biometrico');
+            }
+
+            Swal.fire({
+                title: 'Registrado',
+                text: 'Tu dispositivo biometrico fue registrado con exito.',
+                icon: 'success',
+                confirmButtonColor: '#10b981'
+            });
+            setBiometricCount(1);
+        } catch (err) {
+            Swal.fire({
+                title: 'Error',
+                text: err.message || 'No se pudo completar el registro biometrico.',
+                icon: 'error',
+                confirmButtonColor: '#ef4444'
+            });
+        } finally {
+            setIsBiometricLoading(false);
+        }
+    };
+
+    const handleRemoveBiometric = async () => {
+        if (!currentUser?.app_user_id) return;
+        const confirm = await Swal.fire({
+            title: 'Eliminar registro biometrico?',
+            text: 'Ya no podras ingresar con huella digital o Face ID.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Eliminar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#ef4444',
+        });
+        if (!confirm.isConfirmed) return;
+        setIsBiometricLoading(true);
+        try {
+            const res = await fetch('/api/auth/webauthn/remove-credentials', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appUserId: currentUser.app_user_id }),
+            });
+            if (!res.ok) throw new Error('Error al eliminar');
+            Swal.fire({
+                title: 'Eliminado',
+                text: 'Tu registro biometrico fue eliminado.',
+                icon: 'success',
+                confirmButtonColor: '#10b981'
+            });
+            setBiometricCount(0);
+        } catch (err) {
+            Swal.fire({
+                title: 'Error',
+                text: err.message || 'No se pudo eliminar el registro biometrico.',
+                icon: 'error',
+                confirmButtonColor: '#ef4444'
+            });
+        } finally {
+            setIsBiometricLoading(false);
+        }
+    };
+
     return (
         <MainLayout>
             <div className="supervisor-home-view">
@@ -319,6 +422,38 @@ export default function SupervisorHomePage() {
                     ) : (
                         <p className="supervisor-home-error">{error}</p>
                     )}
+
+                    {currentUser?.app_user_id ? (
+                        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                                Dispositivo biometrico
+                            </p>
+                            {biometricCount > 0 ? (
+                                <>
+                                    <p style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                                        Huella digital / Face ID registrado
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className="btn btn-danger"
+                                        onClick={handleRemoveBiometric}
+                                        disabled={isBiometricLoading}
+                                    >
+                                        {isBiometricLoading ? 'Procesando...' : 'Eliminar registro biometrico'}
+                                    </button>
+                                </>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={handleRegisterBiometric}
+                                    disabled={isBiometricLoading}
+                                >
+                                    {isBiometricLoading ? 'Procesando...' : 'Registrar huella digital / Face ID'}
+                                </button>
+                            )}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </MainLayout>

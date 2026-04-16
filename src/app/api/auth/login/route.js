@@ -36,6 +36,7 @@ export async function POST(req) {
 
         const user = {
             id: appUser.role === 'supervisor' ? appUser.supervisor_id : appUser.id,
+            app_user_id: appUser.id,
             name: appUser.name,
             surname: appUser.surname,
             dni: appUser.username,

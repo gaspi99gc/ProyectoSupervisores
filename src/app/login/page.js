@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Swal from 'sweetalert2';
 import { saveSession } from '@/lib/session';
 
 export default function LoginScreen() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isBiometricLoading, setIsBiometricLoading] = useState(false);
     const router = useRouter();
 
     const handleQuickAccess = async (role) => {
@@ -82,6 +84,80 @@ export default function LoginScreen() {
         }
     };
 
+    const handleBiometricLogin = async () => {
+        setIsBiometricLoading(true);
+        setError('');
+        try {
+            let currentUsername = null;
+            let optionsRes = await fetch('/api/auth/webauthn/auth-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            let { options, discoverable } = await optionsRes.json();
+            if (!options) throw new Error('No se pudieron generar las opciones de autenticacion');
+
+            const { startAuthentication } = await import('@simplewebauthn/browser');
+            let credential;
+            try {
+                credential = await startAuthentication({ optionsJSON: options });
+            } catch (authErr) {
+                if (!discoverable || authErr.name === 'NotAllowedError') {
+                    const { value: dniInput } = await Swal.fire({
+                        title: 'Ingresa tu DNI',
+                        input: 'text',
+                        inputLabel: 'Para continuar con la huella digital, ingresa tu DNI de usuario.',
+                        inputPlaceholder: 'DNI',
+                        showCancelButton: true,
+                        confirmButtonText: 'Continuar',
+                        cancelButtonText: 'Cancelar',
+                        inputValidator: (value) => {
+                            if (!value) return 'El DNI es requerido';
+                        },
+                    });
+                    if (!dniInput) {
+                        setIsBiometricLoading(false);
+                        return;
+                    }
+                    currentUsername = dniInput.trim();
+                    optionsRes = await fetch('/api/auth/webauthn/auth-options', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: currentUsername }),
+                    });
+                    const fallbackData = await optionsRes.json();
+                    if (!fallbackData.options) throw new Error('No se pudieron generar las opciones de autenticacion');
+                    credential = await startAuthentication({ optionsJSON: fallbackData.options });
+                } else {
+                    throw authErr;
+                }
+            }
+
+            const verifyRes = await fetch('/api/auth/webauthn/auth-verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ credential, username: currentUsername }),
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.user) {
+                throw new Error(verifyData.error || 'Autenticacion biometrica fallida');
+            }
+
+            saveSession(verifyData.user);
+            if (verifyData.user.role === 'admin') {
+                router.push('/');
+            } else if (verifyData.user.role === 'purchases') {
+                router.push('/compras');
+            } else {
+                router.push('/mi-panel');
+            }
+        } catch (err) {
+            setError(err.message || 'Error al iniciar sesion con biometria.');
+        } finally {
+            setIsBiometricLoading(false);
+        }
+    };
+
     return (
         <div className="login-container">
             <div className="login-card">
@@ -118,6 +194,15 @@ export default function LoginScreen() {
                     {error && <p className="error-message" style={{ color: 'var(--error)', marginBottom: '10px', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center' }}>{error}</p>}
                     <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.8rem 1rem', fontSize: '1.1rem', marginTop: '1rem' }}>
                         Ingresar
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ width: '100%', padding: '0.8rem 1rem', fontSize: '1.1rem', marginTop: '0.75rem' }}
+                        onClick={handleBiometricLogin}
+                        disabled={isBiometricLoading}
+                    >
+                        {isBiometricLoading ? 'Procesando...' : 'Ingresar con huella digital / Face ID'}
                     </button>
                 </form>
 
