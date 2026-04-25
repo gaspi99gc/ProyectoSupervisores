@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import MainLayout from '@/components/MainLayout';
 import { useRouter } from 'next/navigation';
 import { formatArgentinaDate, parseAppDate } from '@/lib/datetime';
+import { getSessionUser } from '@/lib/session';
 
 const getTrialPeriodEndDate = (employee) => {
   if (employee.fecha_fin_prueba) {
@@ -26,9 +27,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     // Check role before fetching
-    const userStr = localStorage.getItem('currentUser');
-    if (!userStr) return;
-    const user = JSON.parse(userStr);
+    const user = getSessionUser();
+    if (!user) return;
 
     if (user.role !== 'admin') {
       router.push('/mi-panel');

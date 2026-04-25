@@ -51,13 +51,13 @@ export default function PresentismoAdminPage() {
     return (
         <MainLayout>
             <div className="presentismo-admin-view">
-                <header className="page-header" style={{ marginBottom: '2rem' }}>
+                <header className="page-header" style={{ marginBottom: '2rem', flexWrap: 'wrap' }}>
                     <div>
                         <h1>Presentismo en Tiempo Real</h1>
                         <p style={{ color: 'var(--text-muted)' }}>Supervisores que estan chambeando ahora mismo</p>
                     </div>
-                    <div className="page-header-actions">
-                        <div className="badge badge-success" style={{ fontSize: '0.85rem' }}>
+                    <div className="page-header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div className="badge badge-success" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                             {activeSupervisors.length} activos
                         </div>
                     </div>
@@ -78,7 +78,7 @@ export default function PresentismoAdminPage() {
                         </div>
                     ) : (
                         <div className="table-container">
-                            <table className="table">
+                            <table className="table mobile-cards-table">
                                 <thead>
                                     <tr>
                                         <th>Supervisor</th>
@@ -90,13 +90,13 @@ export default function PresentismoAdminPage() {
                                 <tbody>
                                     {activeSupervisors.length > 0 ? activeSupervisors.map((item) => (
                                         <tr key={item.supervisor_id}>
-                                            <td>
+                                            <td data-label="Supervisor">
                                                 <strong>{item.supervisor_surname}, {item.supervisor_name}</strong>
                                                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>DNI: {item.supervisor_dni}</div>
                                             </td>
-                                            <td>{item.current_service_name || 'Sin servicio'}</td>
-                                            <td>{item.current_service_address || 'Sin direccion cargada'}</td>
-                                            <td>
+                                            <td data-label="Servicio">{item.current_service_name || 'Sin servicio'}</td>
+                                            <td data-label="Direccion">{item.current_service_address || 'Sin direccion cargada'}</td>
+                                            <td data-label="Hora de ingreso">
                                                 {item.entered_at
                                                     ? formatArgentinaDateTime(item.entered_at)
                                                     : 'Sin registro'}
