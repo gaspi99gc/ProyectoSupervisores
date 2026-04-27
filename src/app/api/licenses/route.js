@@ -1,6 +1,18 @@
 import { db } from '@/lib/db';
+import { runMigrations } from '@/lib/migrations';
+
+// Run migrations on first API call
+let migrationsRun = false;
+
+async function ensureMigrations() {
+    if (!migrationsRun) {
+        await runMigrations();
+        migrationsRun = true;
+    }
+}
 
 export async function GET(request) {
+    await ensureMigrations();
     try {
         const { searchParams } = new URL(request.url);
         const employeeId = searchParams.get('employee_id');
@@ -42,6 +54,7 @@ export async function GET(request) {
 }
 
 export async function POST(req) {
+    await ensureMigrations();
     try {
         const data = await req.json();
         const { employee_id, type, start_date, end_date, notes } = data;
@@ -77,7 +90,7 @@ export async function POST(req) {
         
         return Response.json({ id: result.rows[0].id, ...data, status: 'activa' }, { status: 201 });
     } catch (error) {
-        console.error('Error creating license:', error);
-        return Response.json({ error: 'Failed to create license' }, { status: 500 });
+        console.error('Error creating license:', error.message);
+        return Response.json({ error: 'Failed to create license: ' + error.message }, { status: 500 });
     }
 }

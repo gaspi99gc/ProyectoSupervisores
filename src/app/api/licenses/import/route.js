@@ -1,7 +1,19 @@
 import { db } from '@/lib/db';
+import { runMigrations } from '@/lib/migrations';
 import * as XLSX from 'xlsx';
 
+// Run migrations on first API call
+let migrationsRun = false;
+
+async function ensureMigrations() {
+    if (!migrationsRun) {
+        await runMigrations();
+        migrationsRun = true;
+    }
+}
+
 export async function POST(req) {
+    await ensureMigrations();
     try {
         const formData = await req.formData();
         const file = formData.get('file');
@@ -90,12 +102,13 @@ export async function POST(req) {
             errors: errors.length > 0 ? errors : undefined
         });
     } catch (error) {
-        console.error('Error importing licenses:', error);
-        return Response.json({ error: 'Failed to import licenses' }, { status: 500 });
+        console.error('Error importing licenses:', error.message);
+        return Response.json({ error: 'Failed to import licenses: ' + error.message }, { status: 500 });
     }
 }
 
 export async function GET() {
+    await ensureMigrations();
     try {
         const { rows } = await db.execute(`
             SELECT l.*, e.nombre, e.apellido, e.legajo, e.servicio_id, s.name as service_name

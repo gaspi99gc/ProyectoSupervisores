@@ -1,6 +1,18 @@
 import { db } from '@/lib/db';
+import { runMigrations } from '@/lib/migrations';
+
+// Run migrations on first API call
+let migrationsRun = false;
+
+async function ensureMigrations() {
+    if (!migrationsRun) {
+        await runMigrations();
+        migrationsRun = true;
+    }
+}
 
 export async function PUT(req, { params }) {
+    await ensureMigrations();
     try {
         const { id } = await params;
         const data = await req.json();
@@ -39,12 +51,13 @@ export async function PUT(req, { params }) {
         
         return Response.json({ id: parseInt(id), ...data });
     } catch (error) {
-        console.error('Error updating license:', error);
-        return Response.json({ error: 'Failed to update license' }, { status: 500 });
+        console.error('Error updating license:', error.message);
+        return Response.json({ error: 'Failed to update license: ' + error.message }, { status: 500 });
     }
 }
 
 export async function DELETE(req, { params }) {
+    await ensureMigrations();
     try {
         const { id } = await params;
         
@@ -55,7 +68,7 @@ export async function DELETE(req, { params }) {
         
         return Response.json({ message: 'License deleted successfully' });
     } catch (error) {
-        console.error('Error deleting license:', error);
-        return Response.json({ error: 'Failed to delete license' }, { status: 500 });
+        console.error('Error deleting license:', error.message);
+        return Response.json({ error: 'Failed to delete license: ' + error.message }, { status: 500 });
     }
 }
