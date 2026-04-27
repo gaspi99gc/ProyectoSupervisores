@@ -1,60 +1,57 @@
-import { db } from '@/lib/db';
-import { runMigrations } from '@/lib/migrations';
-
-// Run migrations on first API call
-let migrationsRun = false;
-
-async function ensureMigrations() {
-    if (!migrationsRun) {
-        await runMigrations();
-        migrationsRun = true;
-    }
-}
+import { supabase } from '@/lib/db';
 
 export async function GET(request) {
-    await ensureMigrations();
     try {
         const { searchParams } = new URL(request.url);
         const employeeId = searchParams.get('employee_id');
         const status = searchParams.get('status');
         const type = searchParams.get('type');
         
-        let sql = `
-            SELECT l.*, e.nombre, e.apellido, e.legajo, e.servicio_id, s.name as service_name
-            FROM licenses l
-            JOIN employees e ON l.employee_id = e.id
-            LEFT JOIN services s ON e.servicio_id = s.id
-            WHERE 1=1
-        `;
-        const args = [];
+        let query = supabase
+            .from('licenses')
+            .select(`
+                *,
+                employees:employee_id (nombre, apellido, legajo, servicio_id),
+                services:servicio_id (name)
+            `)
+            .order('start_date', { ascending: false });
         
         if (employeeId) {
-            sql += ' AND l.employee_id = ?';
-            args.push(employeeId);
+            query = query.eq('employee_id', employeeId);
         }
         
         if (status) {
-            sql += ' AND l.status = ?';
-            args.push(status);
+            query = query.eq('status', status);
         }
         
         if (type) {
-            sql += ' AND l.type = ?';
-            args.push(type);
+            query = query.eq('type', type);
         }
         
-        sql += ' ORDER BY l.start_date DESC';
+        const { data, error } = await query;
         
-        const { rows } = await db.execute({ sql, args });
-        return Response.json(rows);
+        if (error) {
+            console.error('Error fetching licenses:', error);
+            return Response.json({ error: 'Failed to fetch licenses: ' + error.message }, { status: 500 });
+        }
+        
+        // Transform data to match expected format
+        const transformed = data.map(row => ({
+            ...row,
+            nombre: row.employees?.nombre,
+            apellido: row.employees?.apellido,
+            legajo: row.employees?.legajo,
+            service_name: row.services?.name
+        }));
+        
+        return Response.json(transformed);
     } catch (error) {
-        console.error('Error fetching licenses:', error);
-        return Response.json({ error: 'Failed to fetch licenses' }, { status: 500 });
+        console.error('Error fetching licenses:', error.message);
+        return Response.json({ error: 'Failed to fetch licenses: ' + error.message }, { status: 500 });
     }
 }
 
 export async function POST(req) {
-    await ensureMigrations();
     try {
         const data = await req.json();
         const { employee_id, type, start_date, end_date, notes } = data;
@@ -64,31 +61,40 @@ export async function POST(req) {
         }
         
         // Validar que no haya solapamiento
-        const overlapCheck = await db.execute({
-            sql: `
-                SELECT id FROM licenses 
-                WHERE employee_id = ? 
-                AND status = 'activa'
-                AND (
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date >= ? AND end_date <= ?)
-                )
-            `,
-            args: [employee_id, end_date, start_date, end_date, start_date, start_date, end_date]
-        });
+        const { data: existingLicenses, error: overlapError } = await supabase
+            .from('licenses')
+            .select('id')
+            .eq('employee_id', employee_id)
+            .eq('status', 'activa')
+            .or(`and(start_date.lte.${end_date},end_date.gte.${start_date})`);
         
-        if (overlapCheck.rows.length > 0) {
+        if (overlapError) {
+            console.error('Overlap check error:', overlapError);
+        }
+        
+        if (existingLicenses && existingLicenses.length > 0) {
             return Response.json({ error: 'El empleado ya tiene una licencia en esas fechas' }, { status: 400 });
         }
         
-        const result = await db.execute({
-            sql: `INSERT INTO licenses (employee_id, type, start_date, end_date, notes, status) 
-                  VALUES (?, ?, ?, ?, ?, 'activa') RETURNING id`,
-            args: [employee_id, type, start_date, end_date, notes || null]
-        });
+        const { data: result, error } = await supabase
+            .from('licenses')
+            .insert([{
+                employee_id,
+                type,
+                start_date,
+                end_date,
+                notes: notes || null,
+                status: 'activa'
+            }])
+            .select()
+            .single();
         
-        return Response.json({ id: result.rows[0].id, ...data, status: 'activa' }, { status: 201 });
+        if (error) {
+            console.error('Error creating license:', error);
+            return Response.json({ error: 'Failed to create license: ' + error.message }, { status: 500 });
+        }
+        
+        return Response.json(result, { status: 201 });
     } catch (error) {
         console.error('Error creating license:', error.message);
         return Response.json({ error: 'Failed to create license: ' + error.message }, { status: 500 });

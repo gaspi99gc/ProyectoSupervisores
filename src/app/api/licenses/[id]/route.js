@@ -1,18 +1,6 @@
-import { db } from '@/lib/db';
-import { runMigrations } from '@/lib/migrations';
-
-// Run migrations on first API call
-let migrationsRun = false;
-
-async function ensureMigrations() {
-    if (!migrationsRun) {
-        await runMigrations();
-        migrationsRun = true;
-    }
-}
+import { supabase } from '@/lib/db';
 
 export async function PUT(req, { params }) {
-    await ensureMigrations();
     try {
         const { id } = await params;
         const data = await req.json();
@@ -23,33 +11,43 @@ export async function PUT(req, { params }) {
         }
         
         // Validar que no haya solapamiento (excluyendo la licencia actual)
-        const overlapCheck = await db.execute({
-            sql: `
-                SELECT id FROM licenses 
-                WHERE employee_id = ? 
-                AND status = 'activa'
-                AND id != ?
-                AND (
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date <= ? AND end_date >= ?) OR
-                    (start_date >= ? AND end_date <= ?)
-                )
-            `,
-            args: [employee_id, id, end_date, start_date, end_date, start_date, start_date, end_date]
-        });
+        const { data: existingLicenses, error: overlapError } = await supabase
+            .from('licenses')
+            .select('id')
+            .eq('employee_id', employee_id)
+            .eq('status', 'activa')
+            .neq('id', id)
+            .or(`and(start_date.lte.${end_date},end_date.gte.${start_date})`);
         
-        if (overlapCheck.rows.length > 0) {
+        if (overlapError) {
+            console.error('Overlap check error:', overlapError);
+        }
+        
+        if (existingLicenses && existingLicenses.length > 0) {
             return Response.json({ error: 'El empleado ya tiene una licencia en esas fechas' }, { status: 400 });
         }
         
-        await db.execute({
-            sql: `UPDATE licenses 
-                  SET employee_id = ?, type = ?, start_date = ?, end_date = ?, notes = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-                  WHERE id = ?`,
-            args: [employee_id, type, start_date, end_date, notes || null, status || 'activa', id]
-        });
+        const { data: result, error } = await supabase
+            .from('licenses')
+            .update({
+                employee_id,
+                type,
+                start_date,
+                end_date,
+                notes: notes || null,
+                status: status || 'activa',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
         
-        return Response.json({ id: parseInt(id), ...data });
+        if (error) {
+            console.error('Error updating license:', error);
+            return Response.json({ error: 'Failed to update license: ' + error.message }, { status: 500 });
+        }
+        
+        return Response.json(result);
     } catch (error) {
         console.error('Error updating license:', error.message);
         return Response.json({ error: 'Failed to update license: ' + error.message }, { status: 500 });
@@ -57,14 +55,18 @@ export async function PUT(req, { params }) {
 }
 
 export async function DELETE(req, { params }) {
-    await ensureMigrations();
     try {
         const { id } = await params;
         
-        await db.execute({
-            sql: 'DELETE FROM licenses WHERE id = ?',
-            args: [id]
-        });
+        const { error } = await supabase
+            .from('licenses')
+            .delete()
+            .eq('id', id);
+        
+        if (error) {
+            console.error('Error deleting license:', error);
+            return Response.json({ error: 'Failed to delete license: ' + error.message }, { status: 500 });
+        }
         
         return Response.json({ message: 'License deleted successfully' });
     } catch (error) {

@@ -1,19 +1,7 @@
-import { db } from '@/lib/db';
-import { runMigrations } from '@/lib/migrations';
+import { supabase } from '@/lib/db';
 import * as XLSX from 'xlsx';
 
-// Run migrations on first API call
-let migrationsRun = false;
-
-async function ensureMigrations() {
-    if (!migrationsRun) {
-        await runMigrations();
-        migrationsRun = true;
-    }
-}
-
 export async function POST(req) {
-    await ensureMigrations();
     try {
         const formData = await req.formData();
         const file = formData.get('file');
@@ -32,8 +20,6 @@ export async function POST(req) {
         
         for (const row of data) {
             const legajo = row.Legajo || row.legajo;
-            const nombre = row.Nombre || row.nombre;
-            const apellido = row.Apellido || row.apellido;
             const type = (row['Tipo Licencia'] || row.tipo_licencia || row.type || '').toLowerCase();
             const startDate = row['Fecha Inicio'] || row.fecha_inicio || row.start_date;
             const endDate = row['Fecha Fin'] || row.fecha_fin || row.end_date;
@@ -45,17 +31,18 @@ export async function POST(req) {
             }
             
             // Buscar empleado por legajo
-            const empResult = await db.execute({
-                sql: 'SELECT id FROM employees WHERE legajo = ?',
-                args: [legajo]
-            });
+            const { data: employees, error: empError } = await supabase
+                .from('employees')
+                .select('id')
+                .eq('legajo', legajo)
+                .single();
             
-            if (empResult.rows.length === 0) {
+            if (empError || !employees) {
                 errors.push(`Empleado no encontrado: ${legajo}`);
                 continue;
             }
             
-            const employee_id = empResult.rows[0].id;
+            const employee_id = employees.id;
             
             // Validar tipo de licencia
             const validTypes = ['vacaciones', 'enfermedad', 'maternidad', 'paternidad', 'psiquiatrica', 'sin_goce'];
@@ -64,33 +51,23 @@ export async function POST(req) {
                 continue;
             }
             
-            // Validar solapamiento
-            const overlapCheck = await db.execute({
-                sql: `
-                    SELECT id FROM licenses 
-                    WHERE employee_id = ? 
-                    AND status = 'activa'
-                    AND (
-                        (start_date <= ? AND end_date >= ?) OR
-                        (start_date <= ? AND end_date >= ?) OR
-                        (start_date >= ? AND end_date <= ?)
-                    )
-                `,
-                args: [employee_id, endDate, startDate, endDate, startDate, startDate, endDate]
-            });
-            
-            if (overlapCheck.rows.length > 0) {
-                errors.push(`Solapamiento para ${legajo}: ${startDate} a ${endDate}`);
-                continue;
-            }
-            
             try {
-                await db.execute({
-                    sql: `INSERT INTO licenses (employee_id, type, start_date, end_date, notes, status) 
-                          VALUES (?, ?, ?, ?, ?, 'activa')`,
-                    args: [employee_id, type, startDate, endDate, notes]
-                });
-                addedCount++;
+                const { error: insertError } = await supabase
+                    .from('licenses')
+                    .insert([{
+                        employee_id,
+                        type,
+                        start_date: startDate,
+                        end_date: endDate,
+                        notes,
+                        status: 'activa'
+                    }]);
+                
+                if (insertError) {
+                    errors.push(`Error insertando ${legajo}: ${insertError.message}`);
+                } else {
+                    addedCount++;
+                }
             } catch (e) {
                 errors.push(`Error insertando ${legajo}: ${e.message}`);
             }
@@ -108,21 +85,24 @@ export async function POST(req) {
 }
 
 export async function GET() {
-    await ensureMigrations();
     try {
-        const { rows } = await db.execute(`
-            SELECT l.*, e.nombre, e.apellido, e.legajo, e.servicio_id, s.name as service_name
-            FROM licenses l
-            JOIN employees e ON l.employee_id = e.id
-            LEFT JOIN services s ON e.servicio_id = s.id
-            ORDER BY l.start_date DESC
-        `);
+        const { data: rows, error } = await supabase
+            .from('licenses')
+            .select(`
+                *,
+                employees:employee_id (nombre, apellido, legajo)
+            `)
+            .order('start_date', { ascending: false });
+        
+        if (error) {
+            throw error;
+        }
         
         // Convertir a Excel
-        const data = rows.map(row => ({
-            'Legajo': row.legajo,
-            'Apellido': row.apellido,
-            'Nombre': row.nombre,
+        const exportData = rows.map(row => ({
+            'Legajo': row.employees?.legajo,
+            'Apellido': row.employees?.apellido,
+            'Nombre': row.employees?.nombre,
             'Tipo Licencia': row.type,
             'Fecha Inicio': row.start_date,
             'Fecha Fin': row.end_date,
@@ -130,7 +110,7 @@ export async function GET() {
             'Estado': row.status
         }));
         
-        const ws = XLSX.utils.json_to_sheet(data);
+        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Licencias');
         
@@ -143,7 +123,7 @@ export async function GET() {
             }
         });
     } catch (error) {
-        console.error('Error exporting licenses:', error);
-        return Response.json({ error: 'Failed to export licenses' }, { status: 500 });
+        console.error('Error exporting licenses:', error.message);
+        return Response.json({ error: 'Failed to export licenses: ' + error.message }, { status: 500 });
     }
 }
