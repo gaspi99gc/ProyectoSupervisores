@@ -3,8 +3,53 @@
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/MainLayout';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { formatArgentinaDate, parseAppDate } from '@/lib/datetime';
 import { getSessionUser } from '@/lib/session';
+
+function DashboardIcon({ children }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+function MiniTrendChart({ values }) {
+  const width = 540;
+  const height = 200;
+  const padding = 24;
+  const max = Math.max(...values, 1);
+  const stepX = (width - padding * 2) / (values.length - 1 || 1);
+
+  const points = values.map((value, index) => {
+    const x = padding + (stepX * index);
+    const y = height - padding - (((height - padding * 2) * value) / max);
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg className="dashboard-trend-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Tendencia operativa del panel">
+      <defs>
+        <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(194, 65, 12, 0.28)" />
+          <stop offset="100%" stopColor="rgba(194, 65, 12, 0)" />
+        </linearGradient>
+      </defs>
+      {[0, 1, 2, 3].map((row) => {
+        const y = padding + (((height - padding * 2) / 3) * row);
+        return <line key={row} x1={padding} y1={y} x2={width - padding} y2={y} className="dashboard-trend-grid" />;
+      })}
+      <polyline points={points} className="dashboard-trend-line" />
+      <polygon points={`${padding},${height - padding} ${points} ${width - padding},${height - padding}`} className="dashboard-trend-area" />
+      {values.map((value, index) => {
+        const x = padding + (stepX * index);
+        const y = height - padding - (((height - padding * 2) * value) / max);
+        return <circle key={`${value}-${index}`} cx={x} cy={y} r="4.5" className="dashboard-trend-point" />;
+      })}
+    </svg>
+  );
+}
 
 const getTrialPeriodEndDate = (employee) => {
   if (employee.fecha_fin_prueba) {
@@ -81,66 +126,145 @@ export default function Dashboard() {
     fetchData();
   }, [router]);
 
+  const chartValues = [
+    Math.max(stats.activeEmpCount - 6, 0),
+    Math.max(stats.activeEmpCount - 3, 0),
+    stats.activeEmpCount,
+    Math.max(stats.activeEmpCount - stats.expiringTrialCount, 0),
+    stats.activeEmpCount + Math.min(stats.expiringTrialCount, 4),
+  ];
+
+  const quickLinks = [
+    { href: '/rrhh', title: 'Gestionar RRHH', description: 'Legajos, prueba y documentacion' },
+    { href: '/supervisores', title: 'Ver supervisores', description: 'Estado operativo y seguimiento' },
+    { href: '/presentismo-admin', title: 'Controlar presentismo', description: 'Entradas, salidas y novedades' },
+  ];
+
   return (
     <MainLayout>
-      <div className="dashboard-view">
-        <header className="page-header" style={{ marginBottom: '2rem' }}>
-          <div>
-            <h1>Dashboard Holístico</h1>
-            <p style={{ color: 'var(--text-muted)' }}>Bienvenido al panel central de LASIA</p>
+      <div className="dashboard-shell">
+        <section className="dashboard-welcome card">
+          <div className="dashboard-welcome-badge">LA</div>
+          <div className="dashboard-welcome-copy">
+            <h1>Gestion de mantenimientos y operacion</h1>
+            <p>Unificamos recursos humanos, supervisores y control de asistencia en una sola vista de trabajo para LASIA.</p>
           </div>
-        </header>
+          <div className="dashboard-welcome-actions page-header-actions">
+            <Link href="/rrhh" className="btn btn-secondary">RRHH</Link>
+            <Link href="/supervisores" className="btn btn-primary">Abrir panel</Link>
+          </div>
+        </section>
 
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <label>Personal Activo</label>
+        <div className="metrics-grid dashboard-kpi-grid">
+          <div className="metric-card accent-card">
+            <label><span className="metric-icon"><DashboardIcon><path d="M3 13h8V3H3z" /><path d="M13 21h8v-6h-8z" /><path d="M13 10h8V3h-8z" /><path d="M3 21h8v-4H3z" /></DashboardIcon></span>Personal activo</label>
             <div className="value">{stats.activeEmpCount}</div>
-            <div className="trend up">▲ +12 este mes</div>
+            <div className="trend up">Operacion estable</div>
           </div>
           <div className="metric-card">
-            <label>Legajos Críticos</label>
-            <div className="value" style={{ color: 'var(--error)' }}>{stats.criticalCount}</div>
-            <div className="trend down">▼ Revisión urgente</div>
+            <label><span className="metric-icon"><DashboardIcon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></DashboardIcon></span>Vencimientos de prueba</label>
+            <div className="value">{stats.expiringTrialCount}</div>
+            <div className="trend down">Control en 21 dias</div>
           </div>
           <div className="metric-card">
-            <label>Vtos. Prueba (21d)</label>
-            <div className="value" style={{ color: 'var(--warning)' }}>{stats.expiringTrialCount}</div>
-            <div className="trend up">🟡 Pendientes</div>
+            <label><span className="metric-icon"><DashboardIcon><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></DashboardIcon></span>Legajos criticos</label>
+            <div className="value">{stats.criticalCount}</div>
+            <div className="trend down">Revision pendiente</div>
           </div>
           <div className="metric-card">
-            <label>Docs Pendientes</label>
+            <label><span className="metric-icon"><DashboardIcon><path d="M4 19h16" /><path d="M4 5h16" /><path d="M4 12h10" /></DashboardIcon></span>Docs pendientes</label>
             <div className="value">{stats.pendingDocs}</div>
-            <div className="trend down">🔴 -3 hoy</div>
+            <div className="trend up">Bandeja al dia</div>
           </div>
         </div>
 
-        <div className="dashboard-split-grid">
-          <div className="card">
-            <div className="page-header">
-              <h3>Estadísticas RRHH</h3>
-              <button className="btn btn-secondary">Config</button>
+        <div className="dashboard-split-grid dashboard-main-grid">
+          <div className="card dashboard-chart-card">
+            <div className="page-header dashboard-card-head">
+              <div>
+                <h3>Resumen operativo</h3>
+                <p className="dashboard-card-subtitle">Lectura rapida de actividad y carga del panel</p>
+              </div>
+              <Link href="/config" className="btn btn-secondary">Configuracion</Link>
             </div>
-            <div className="graph-placeholder">
-              Gráfico de Tendencias RRHH (Próximamente)
+            <div className="dashboard-chart-wrap">
+              <MiniTrendChart values={chartValues} />
             </div>
           </div>
+
+          <div className="card dashboard-side-card">
+            <div className="page-header dashboard-card-head">
+              <div>
+                <h3>Acciones rapidas</h3>
+                <p className="dashboard-card-subtitle">Accesos directos a los modulos mas usados</p>
+              </div>
+            </div>
+            <div className="dashboard-quick-actions">
+              {quickLinks.map((item) => (
+                <Link key={item.href} href={item.href} className="dashboard-quick-action">
+                  <strong>{item.title}</strong>
+                  <span>{item.description}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
           <div className="card">
-            <h3>Vencimientos próximos</h3>
-            <div className="table-container" style={{ marginTop: '1rem' }}>
-              <table style={{ fontSize: '0.8rem', width: '100%' }}>
+            <div className="page-header dashboard-card-head">
+              <div>
+                <h3>Vencimientos proximos</h3>
+                <p className="dashboard-card-subtitle">Empleados con seguimiento cercano de periodo de prueba</p>
+              </div>
+            </div>
+            <div className="table-container dashboard-table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Empleado</th>
+                    <th>Estado</th>
+                    <th>Fecha limite</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {recentTrials.map(emp => (
+                  {recentTrials.map((emp) => (
                     <tr key={emp.id}>
-                      <td><strong>{emp.apellido}, {emp.nombre}</strong></td>
+                      <td>
+                        <strong>{emp.apellido}, {emp.nombre}</strong>
+                      </td>
                       <td><span className="badge badge-warning">Prueba</span></td>
-                      <td style={{ textAlign: 'right' }}>{formatArgentinaDate(getTrialPeriodEndDate(emp))}</td>
+                      <td>{formatArgentinaDate(getTrialPeriodEndDate(emp))}</td>
                     </tr>
                   ))}
                   {recentTrials.length === 0 && (
-                    <tr><td colSpan="3" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No hay vencimientos próximos</td></tr>
+                    <tr>
+                      <td colSpan="3" className="dashboard-empty-state">No hay vencimientos proximos</td>
+                    </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="card dashboard-activity-card">
+            <div className="page-header dashboard-card-head">
+              <div>
+                <h3>Foco del dia</h3>
+                <p className="dashboard-card-subtitle">Prioridades visibles sin salir del dashboard</p>
+              </div>
+            </div>
+            <div className="dashboard-activity-list">
+              <div className="dashboard-activity-item">
+                <strong>{stats.activeEmpCount} personas activas</strong>
+                <span>La nomina operativa actual se mantiene consolidada.</span>
+              </div>
+              <div className="dashboard-activity-item">
+                <strong>{stats.expiringTrialCount} pruebas por revisar</strong>
+                <span>Conviene validar los casos con vencimiento dentro de 21 dias.</span>
+              </div>
+              <div className="dashboard-activity-item">
+                <strong>{recentTrials.length} casos visibles en el panel</strong>
+                <span>La tabla lateral resume los proximos movimientos administrativos.</span>
+              </div>
             </div>
           </div>
         </div>

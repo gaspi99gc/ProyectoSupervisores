@@ -3,8 +3,37 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 import { getSessionUser, clearSession } from '@/lib/session';
+
+function Icon({ children, size = 18, stroke = 1.8 }) {
+    return (
+        <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {children}
+        </svg>
+    );
+}
+
+function NavIcon({ name }) {
+    const icons = {
+        dashboard: <><path d="M3 13h8V3H3z" /><path d="M13 21h8v-6h-8z" /><path d="M13 10h8V3h-8z" /><path d="M3 21h8v-4H3z" /></>,
+        rrhh: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 8v6" /><path d="M23 11h-6" /></>,
+        supervisors: <><path d="M12 20h9" /><path d="M12 4h9" /><path d="M12 12h9" /><path d="M3 6h4" /><path d="M3 12h4" /><path d="M3 18h4" /><path d="M9 4v4" /><path d="M9 10v4" /><path d="M9 16v4" /></>,
+        presentismo: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+        config: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.09V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9.2 20a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.09-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4 9.2a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.09V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 14 4a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.27.3.47.65.6 1 .08.28.38.6 1.09.6H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.4Z" /></>,
+        compras: <><circle cx="9" cy="20" r="1" /><circle cx="18" cy="20" r="1" /><path d="M3 4h2l2.2 10.5a1 1 0 0 0 1 .8h9.8a1 1 0 0 0 1-.76L21 7H7" /></>,
+        servicios: <><path d="M12 21s-6-4.35-6-10a6 6 0 1 1 12 0c0 5.65-6 10-6 10Z" /><circle cx="12" cy="11" r="2.5" /></>,
+        realizados: <><path d="M20 6 9 17l-5-5" /></>,
+        historico: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
+        logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></>,
+        menu: <><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>,
+        close: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
+        search: <><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>,
+        bell: <><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
+        sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></>,
+    };
+
+    return <Icon>{icons[name] || icons.dashboard}</Icon>;
+}
 
 export default function MainLayout({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
@@ -13,6 +42,57 @@ export default function MainLayout({ children }) {
     const [themeLoaded, setThemeLoaded] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
+
+    const getInitials = () => {
+        const name = currentUser?.name?.trim()?.[0] || 'L';
+        const surname = currentUser?.surname?.trim()?.[0] || 'A';
+        return `${name}${surname}`.toUpperCase();
+    };
+
+    const getNavigationGroups = () => {
+        if (currentUser?.role === 'admin') {
+            return [
+                {
+                    title: 'General',
+                    items: [
+                        { href: '/', label: 'Dashboard', icon: 'dashboard', active: pathname === '/' },
+                        { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
+                        { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
+                        { href: '/presentismo-admin', label: 'Presentismo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                    ],
+                },
+                {
+                    title: 'Sistema',
+                    items: [
+                        { href: '/config', label: 'Configuracion', icon: 'config', active: pathname === '/config' },
+                    ],
+                },
+            ];
+        }
+
+        if (currentUser?.role === 'purchases') {
+            return [
+                {
+                    title: 'Compras',
+                    items: [
+                        { href: '/compras', label: 'Compras', icon: 'compras', active: pathname === '/compras' },
+                        { href: '/compras/servicios', label: 'Servicios', icon: 'servicios', active: pathname === '/compras/servicios' },
+                        { href: '/compras/realizados', label: 'Pedidos Completos', icon: 'realizados', active: pathname === '/compras/realizados' },
+                    ],
+                },
+            ];
+        }
+
+        return [
+            {
+                title: 'Supervisor',
+                items: [
+                    { href: '/mi-panel', label: 'Presentismo', icon: 'presentismo', active: pathname === '/mi-panel' || pathname === '/mi-panel/presentismo' },
+                    { href: '/mi-panel/historico-pedidos', label: 'Historico de Pedidos', icon: 'historico', active: pathname === '/mi-panel/historico-pedidos' },
+                ],
+            },
+        ];
+    };
 
     useEffect(() => {
         const saved = getSessionUser();
@@ -71,101 +151,59 @@ export default function MainLayout({ children }) {
         return 'LASIA';
     };
 
+    const navGroups = getNavigationGroups();
+
     if (!currentUser) return null; // Wait for auth
 
     return (
         <div className="app-wrapper">
             <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
-                <div className="sidebar-logo">
-                    <Image
-                        src="/branding/logo-lasia-limpieza.png"
-                        alt="LASIA Limpieza"
-                        className="sidebar-logo-image"
-                        width={240}
-                        height={56}
-                        priority
-                    />
+                <div className="sidebar-logo sidebar-brand-block">
+                    <div className="sidebar-brand-mark">LA</div>
+                    <div className="sidebar-brand-copy">
+                        <strong>LASIA</strong>
+                        <span>Panel operativo</span>
+                    </div>
                     <button
                         type="button"
                         className="mobile-menu-close"
                         onClick={() => setIsMobileMenuOpen(false)}
                         aria-label="Cerrar menu"
                     >
-                        ✕
+                        <NavIcon name="close" />
                     </button>
+                </div>
+                <div className="sidebar-search">
+                    <span className="sidebar-search-icon"><NavIcon name="search" /></span>
+                    <input type="text" placeholder="Buscar modulo" aria-label="Buscar modulo" />
                 </div>
                 <nav className="sidebar-menu">
-                    {currentUser.role === 'admin' ? (
-                        <>
-                            <Link href="/">
-                                <div className={`menu-item ${pathname === '/' ? 'active' : ''}`}>
-                                    🏠 Dashboard
-                                </div>
-                            </Link>
-                            <Link href="/rrhh">
-                                <div className={`menu-item ${pathname === '/rrhh' || pathname === '/periodo-prueba' ? 'active' : ''}`}>
-                                    👥 RRHH
-                                </div>
-                            </Link>
-                            <Link href="/supervisores">
-                                <div className={`menu-item ${pathname === '/supervisores' ? 'active' : ''}`}>
-                                    📋 Supervisores
-                                </div>
-                            </Link>
-                            <Link href="/presentismo-admin">
-                                <div className={`menu-item ${pathname === '/presentismo-admin' ? 'active' : ''}`}>
-                                    🟢 Presentismo
-                                </div>
-                            </Link>
-                            <Link href="/config">
-                                <div className={`menu-item ${pathname === '/config' ? 'active' : ''}`}>
-                                    ⚙ Configuración
-                                </div>
-                            </Link>
-                        </>
-                    ) : currentUser.role === 'purchases' ? (
-                        <>
-                            <Link href="/compras">
-                                <div className={`menu-item ${pathname === '/compras' ? 'active' : ''}`}>
-                                    🛒 Compras
-                                </div>
-                            </Link>
-                            <Link href="/compras/servicios">
-                                <div className={`menu-item ${pathname === '/compras/servicios' ? 'active' : ''}`}>
-                                    📍 Servicios
-                                </div>
-                            </Link>
-                            <Link href="/compras/realizados">
-                                <div className={`menu-item ${pathname === '/compras/realizados' ? 'active' : ''}`}>
-                                    ✅ Pedidos Completos
-                                </div>
-                            </Link>
-                        </>
-                    ) : (
-                        <>
-                            <Link href="/mi-panel">
-                                <div className={`menu-item ${pathname === '/mi-panel' || pathname === '/mi-panel/presentismo' ? 'active' : ''}`}>
-                                    📍 Presentismo
-                                </div>
-                            </Link>
-                            <Link href="/mi-panel/historico-pedidos">
-                                <div className={`menu-item ${pathname === '/mi-panel/historico-pedidos' ? 'active' : ''}`}>
-                                    🧾 Historico de Pedidos
-                                </div>
-                            </Link>
-                        </>
-                    )}
+                    {navGroups.map((group) => (
+                        <div key={group.title} className="sidebar-group">
+                            <div className="sidebar-group-title">{group.title}</div>
+                            {group.items.map((item) => (
+                                <Link key={item.href} href={item.href} className={`menu-item ${item.active ? 'active' : ''}`}>
+                                    <span className="menu-item-icon"><NavIcon name={item.icon} /></span>
+                                    <span>{item.label}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    ))}
                 </nav>
-                <div className="sidebar-actions" style={{ padding: '1rem 2rem' }}>
-                    <button className="btn btn-secondary" style={{ width: '100%', background: 'rgba(255,255,255,0.1)', color: '#fff' }} onClick={handleLogout}>
-                        🚪 Cerrar Sesión
+                <div className="sidebar-actions">
+                    <button className="btn btn-secondary sidebar-logout" onClick={handleLogout}>
+                        <NavIcon name="logout" />
+                        <span>Cerrar sesion</span>
                     </button>
                 </div>
-                <div className="sidebar-footer" style={{ padding: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)' }}>
+                <div className="sidebar-footer">
                     <div className="sidebar-footer-row">
-                        <div>
-                            Digitalización Integral<br />
-                            {currentUser.name} {currentUser.surname}
+                        <div className="sidebar-user-card">
+                            <div className="sidebar-user-avatar">{getInitials()}</div>
+                            <div className="sidebar-user-meta">
+                                <strong>{currentUser.name} {currentUser.surname}</strong>
+                                <span>Digitalizacion integral</span>
+                            </div>
                         </div>
                         <label className="theme-switch" aria-label="Cambiar entre modo oscuro y claro" title={themeMode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}>
                             <input
@@ -191,6 +229,21 @@ export default function MainLayout({ children }) {
             )}
 
             <main className="main-container">
+                <div className="topbar">
+                    <div className="topbar-crumbs">
+                        <span>LASIA</span>
+                        <span className="topbar-separator">/</span>
+                        <span className="topbar-current">{getCurrentSectionLabel()}</span>
+                    </div>
+                    <div className="topbar-actions">
+                        <button type="button" className="topbar-icon-button" aria-label="Cambiar tema" onClick={() => setThemeMode((current) => current === 'dark' ? 'light' : 'dark')}>
+                            <NavIcon name="sun" />
+                        </button>
+                        <button type="button" className="topbar-icon-button" aria-label="Notificaciones">
+                            <NavIcon name="bell" />
+                        </button>
+                    </div>
+                </div>
                 <div className="mobile-topbar">
                     <button
                         type="button"
@@ -198,7 +251,7 @@ export default function MainLayout({ children }) {
                         onClick={() => setIsMobileMenuOpen(true)}
                         aria-label="Abrir menu"
                     >
-                        ☰
+                        <NavIcon name="menu" />
                     </button>
                     <div className="mobile-topbar-meta">
                         <strong>{getCurrentSectionLabel()}</strong>
