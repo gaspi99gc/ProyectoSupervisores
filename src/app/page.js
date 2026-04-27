@@ -143,18 +143,6 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="dashboard-shell">
-        <section className="dashboard-welcome card">
-          <div className="dashboard-welcome-badge">LA</div>
-          <div className="dashboard-welcome-copy">
-            <h1>Gestion de mantenimientos y operacion</h1>
-            <p>Unificamos recursos humanos, supervisores y control de asistencia en una sola vista de trabajo para LASIA.</p>
-          </div>
-          <div className="dashboard-welcome-actions page-header-actions">
-            <Link href="/rrhh" className="btn btn-secondary">RRHH</Link>
-            <Link href="/supervisores" className="btn btn-primary">Abrir panel</Link>
-          </div>
-        </section>
-
         <div className="metrics-grid dashboard-kpi-grid">
           <div className="metric-card accent-card">
             <label><span className="metric-icon"><DashboardIcon><path d="M3 13h8V3H3z" /><path d="M13 21h8v-6h-8z" /><path d="M13 10h8V3h-8z" /><path d="M3 21h8v-4H3z" /></DashboardIcon></span>Personal activo</label>

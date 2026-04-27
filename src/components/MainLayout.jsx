@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { getSessionUser, clearSession } from '@/lib/session';
 
 function Icon({ children, size = 18, stroke = 1.8 }) {
@@ -158,12 +159,15 @@ export default function MainLayout({ children }) {
     return (
         <div className="app-wrapper">
             <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
-                <div className="sidebar-logo sidebar-brand-block">
-                    <div className="sidebar-brand-mark">LA</div>
-                    <div className="sidebar-brand-copy">
-                        <strong>LASIA</strong>
-                        <span>Panel operativo</span>
-                    </div>
+                <div className="sidebar-logo">
+                    <Image
+                        src="/branding/logo-lasia-limpieza.png"
+                        alt="LASIA Limpieza"
+                        className="sidebar-logo-image"
+                        width={240}
+                        height={56}
+                        priority
+                    />
                     <button
                         type="button"
                         className="mobile-menu-close"
@@ -172,10 +176,6 @@ export default function MainLayout({ children }) {
                     >
                         <NavIcon name="close" />
                     </button>
-                </div>
-                <div className="sidebar-search">
-                    <span className="sidebar-search-icon"><NavIcon name="search" /></span>
-                    <input type="text" placeholder="Buscar modulo" aria-label="Buscar modulo" />
                 </div>
                 <nav className="sidebar-menu">
                     {navGroups.map((group) => (
@@ -229,21 +229,7 @@ export default function MainLayout({ children }) {
             )}
 
             <main className="main-container">
-                <div className="topbar">
-                    <div className="topbar-crumbs">
-                        <span>LASIA</span>
-                        <span className="topbar-separator">/</span>
-                        <span className="topbar-current">{getCurrentSectionLabel()}</span>
-                    </div>
-                    <div className="topbar-actions">
-                        <button type="button" className="topbar-icon-button" aria-label="Cambiar tema" onClick={() => setThemeMode((current) => current === 'dark' ? 'light' : 'dark')}>
-                            <NavIcon name="sun" />
-                        </button>
-                        <button type="button" className="topbar-icon-button" aria-label="Notificaciones">
-                            <NavIcon name="bell" />
-                        </button>
-                    </div>
-                </div>
+
                 <div className="mobile-topbar">
                     <button
                         type="button"
