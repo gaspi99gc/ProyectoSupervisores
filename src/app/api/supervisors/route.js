@@ -1,27 +1,28 @@
 import { supabase } from '@/lib/db';
 import { ensureSupervisorStatusRow } from '@/lib/supervisor-status';
 
-function sanitize(row) {
-    const user = row.app_users;
-    return {
-        id: row.id,
-        name: user?.name || null,
-        surname: user?.surname || null,
-        dni: user?.username || null,
-        login_enabled: user?.login_enabled !== false,
-    };
-}
 
 export async function GET() {
     try {
         const { data, error } = await supabase
-            .from('supervisors')
-            .select('id, app_users(name, surname, username, login_enabled)')
-            .order('app_users(surname)', { ascending: true });
+            .from('app_users')
+            .select('id, name, surname, username, login_enabled, supervisors(id)')
+            .eq('role', 'supervisor')
+            .order('surname', { ascending: true })
+            .order('name', { ascending: true });
 
         if (error) throw error;
 
-        return Response.json((data || []).map(sanitize));
+        const result = (data || []).map(u => ({
+            id: u.supervisors?.[0]?.id ?? null,
+            app_user_id: u.id,
+            name: u.name,
+            surname: u.surname,
+            dni: u.username,
+            login_enabled: u.login_enabled !== false,
+        }));
+
+        return Response.json(result);
     } catch (error) {
         console.error('Error fetching supervisors:', error);
         return Response.json({ error: 'Failed to fetch supervisors' }, { status: 500 });

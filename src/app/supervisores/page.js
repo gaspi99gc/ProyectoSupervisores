@@ -254,10 +254,10 @@ export default function SupervisoresPage() {
                                                     type="button"
                                                     className="btn btn-secondary"
                                                     onClick={() => handleDownloadPresentismo(sup)}
-                                                    disabled={downloadingSupervisorId === sup.id}
+                                                    disabled={!sup.id || downloadingSupervisorId === sup.id}
                                                 >
-                                                    <span className="desktop-only">{downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
-                                                    <span className="mobile-only">{downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
+                                                    <span className="desktop-only">{sup.id && downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
+                                                    <span className="mobile-only">{sup.id && downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
                                                 </button>
                                             </td>
                                         </tr>

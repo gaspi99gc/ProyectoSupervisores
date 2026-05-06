@@ -1,5 +1,5 @@
-import { db } from '@/lib/db';
-import { ensureWebAuthnTables, getCredentialsByAppUserId, saveChallenge } from '@/lib/webauthn-db';
+import { supabase } from '@/lib/db';
+import { getCredentialsByAppUserId, saveChallenge } from '@/lib/webauthn-db';
 import { getWebAuthnConfig } from '@/lib/webauthn-config';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 
@@ -9,13 +9,14 @@ export async function POST(req) {
         let allowCredentials = undefined;
 
         if (username) {
-            await ensureWebAuthnTables();
-            const { rows: userRows } = await db.execute({
-                sql: 'SELECT id FROM app_users WHERE username = ?',
-                args: [username],
-            });
-            if (userRows.length > 0) {
-                const credentials = await getCredentialsByAppUserId(userRows[0].id);
+            const { data: userRow } = await supabase
+                .from('app_users')
+                .select('id')
+                .eq('username', username)
+                .maybeSingle();
+
+            if (userRow) {
+                const credentials = await getCredentialsByAppUserId(userRow.id);
                 if (credentials.length > 0) {
                     allowCredentials = credentials.map((cred) => ({
                         id: cred.credential_id,
@@ -35,7 +36,6 @@ export async function POST(req) {
             userVerification: 'required',
         });
 
-        await ensureWebAuthnTables();
         await saveChallenge(challengeKey, options.challenge);
 
         return Response.json({ options, discoverable: !username });

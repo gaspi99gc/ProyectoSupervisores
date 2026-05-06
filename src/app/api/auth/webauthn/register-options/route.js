@@ -1,6 +1,5 @@
-import { db } from '@/lib/db';
-import { ensureAppUsersTable } from '@/lib/app-users-auth';
-import { ensureWebAuthnTables, saveChallenge } from '@/lib/webauthn-db';
+import { supabase } from '@/lib/db';
+import { saveChallenge } from '@/lib/webauthn-db';
 import { getWebAuthnConfig } from '@/lib/webauthn-config';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 
@@ -11,17 +10,16 @@ export async function POST(req) {
             return Response.json({ error: 'Usuario no valido' }, { status: 400 });
         }
 
-        await ensureAppUsersTable();
-        const { rows } = await db.execute({
-            sql: 'SELECT id, username, name, surname, role FROM app_users WHERE id = ?',
-            args: [appUserId],
-        });
+        const { data: appUser, error } = await supabase
+            .from('app_users')
+            .select('id, username, name, surname, role')
+            .eq('id', appUserId)
+            .maybeSingle();
 
-        if (rows.length === 0) {
+        if (error || !appUser) {
             return Response.json({ error: 'Usuario no encontrado' }, { status: 404 });
         }
 
-        const appUser = rows[0];
         const { rpID, rpName } = getWebAuthnConfig(req);
 
         const options = await generateRegistrationOptions({
@@ -38,7 +36,6 @@ export async function POST(req) {
             supportedAlgorithmIDs: [-7, -257],
         });
 
-        await ensureWebAuthnTables();
         await saveChallenge(appUser.id, options.challenge);
 
         return Response.json({ options });

@@ -1,7 +1,6 @@
-import { db } from '@/lib/db';
-import { ensureAppUsersTable } from '@/lib/app-users-auth';
+import { supabase } from '@/lib/db';
 import { ensureSupervisorStatusRow } from '@/lib/supervisor-status';
-import { ensureWebAuthnTables, getAndDeleteChallenge, getCredentialById } from '@/lib/webauthn-db';
+import { getAndDeleteChallenge, getCredentialById } from '@/lib/webauthn-db';
 import { getWebAuthnConfig } from '@/lib/webauthn-config';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 
@@ -43,28 +42,30 @@ export async function POST(req) {
             return Response.json({ error: 'Autenticacion fallida' }, { status: 401 });
         }
 
-        await db.execute({
-            sql: 'UPDATE webauthn_credentials SET counter = ? WHERE id = ?',
-            args: [verification.authenticationInfo.newCounter, dbCredential.id],
-        });
+        // Update counter
+        await supabase
+            .from('webauthn_credentials')
+            .update({ counter: verification.authenticationInfo.newCounter })
+            .eq('id', dbCredential.id);
 
-        await ensureAppUsersTable();
-        const { rows } = await db.execute({
-            sql: 'SELECT id, username, name, surname, role, login_enabled, supervisor_id FROM app_users WHERE id = ?',
-            args: [dbCredential.app_user_id],
-        });
+        // Get user with supervisor join
+        const { data: appUser, error: userError } = await supabase
+            .from('app_users')
+            .select('id, username, name, surname, role, login_enabled, supervisors(id)')
+            .eq('id', dbCredential.app_user_id)
+            .maybeSingle();
 
-        if (rows.length === 0) {
+        if (userError || !appUser) {
             return Response.json({ error: 'Usuario no encontrado' }, { status: 404 });
         }
-
-        const appUser = rows[0];
         if (!appUser.login_enabled) {
             return Response.json({ error: 'Tu acceso esta deshabilitado. Contacta al administrador.' }, { status: 403 });
         }
 
+        const supervisorId = appUser.supervisors?.[0]?.id || null;
+
         const user = {
-            id: appUser.role === 'supervisor' ? appUser.supervisor_id : appUser.id,
+            id: appUser.role === 'supervisor' ? supervisorId : appUser.id,
             app_user_id: appUser.id,
             name: appUser.name,
             surname: appUser.surname,
@@ -72,8 +73,8 @@ export async function POST(req) {
             role: appUser.role,
         };
 
-        if (appUser.role === 'supervisor' && appUser.supervisor_id) {
-            await ensureSupervisorStatusRow(appUser.supervisor_id);
+        if (appUser.role === 'supervisor' && supervisorId) {
+            await ensureSupervisorStatusRow(supervisorId);
         }
 
         return Response.json({ user });

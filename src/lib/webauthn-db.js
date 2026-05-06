@@ -1,108 +1,91 @@
-import { db } from './db';
+import { supabase } from './db';
 
-let tablesReady = false;
+function toBase64(data) {
+    if (!data) return null;
+    if (typeof data === 'string') return data;
+    return Buffer.from(data).toString('base64');
+}
+
+function fromBase64(str) {
+    if (!str) return null;
+    return Buffer.from(str, 'base64');
+}
 
 export async function ensureWebAuthnTables() {
-    if (tablesReady) return;
-
-    await db.execute(`
-        CREATE TABLE IF NOT EXISTS webauthn_credentials (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            app_user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-            credential_id TEXT UNIQUE NOT NULL,
-            public_key BLOB NOT NULL,
-            counter INTEGER NOT NULL DEFAULT 0,
-            device_type TEXT,
-            backed_up INTEGER NOT NULL DEFAULT 0,
-            transports TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    await db.execute(`
-        CREATE TABLE IF NOT EXISTS webauthn_challenges (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            challenge TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    tablesReady = true;
+    // Tables created via Supabase SQL editor — no-op here
 }
 
 export async function saveChallenge(userId, challenge) {
-    await ensureWebAuthnTables();
-    await db.execute({
-        sql: 'INSERT INTO webauthn_challenges (user_id, challenge) VALUES (?, ?)',
-        args: [String(userId), challenge],
-    });
+    const { error } = await supabase
+        .from('webauthn_challenges')
+        .insert({ user_id: String(userId), challenge });
+    if (error) throw error;
 }
 
 export async function getAndDeleteChallenge(userId) {
-    await ensureWebAuthnTables();
-    const { rows } = await db.execute({
-        sql: 'SELECT * FROM webauthn_challenges WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
-        args: [String(userId)],
-    });
-    if (rows.length === 0) return null;
-    const challengeRow = rows[0];
-    await db.execute({
-        sql: 'DELETE FROM webauthn_challenges WHERE id = ?',
-        args: [challengeRow.id],
-    });
-    return challengeRow.challenge;
+    const { data, error } = await supabase
+        .from('webauthn_challenges')
+        .select('*')
+        .eq('user_id', String(userId))
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error || !data) return null;
+    await supabase.from('webauthn_challenges').delete().eq('id', data.id);
+    return data.challenge;
 }
 
 export async function saveCredential(appUserId, credential) {
-    await ensureWebAuthnTables();
-    await db.execute({
-        sql: `INSERT INTO webauthn_credentials
-              (app_user_id, credential_id, public_key, counter, device_type, backed_up, transports)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-            appUserId,
-            credential.id,
-            credential.publicKey,
-            credential.counter,
-            credential.deviceType || null,
-            credential.backedUp ? 1 : 0,
-            JSON.stringify(credential.transports || []),
-        ],
-    });
+    const { error } = await supabase
+        .from('webauthn_credentials')
+        .insert({
+            app_user_id: String(appUserId),
+            credential_id: credential.id,
+            public_key: toBase64(credential.publicKey),
+            counter: credential.counter,
+            device_type: credential.deviceType || null,
+            backed_up: credential.backedUp || false,
+            transports: JSON.stringify(credential.transports || []),
+        });
+    if (error) throw error;
 }
 
 export async function getCredentialById(credentialId) {
-    await ensureWebAuthnTables();
-    const { rows } = await db.execute({
-        sql: 'SELECT * FROM webauthn_credentials WHERE credential_id = ? LIMIT 1',
-        args: [credentialId],
-    });
-    return rows[0] || null;
+    const { data, error } = await supabase
+        .from('webauthn_credentials')
+        .select('*')
+        .eq('credential_id', credentialId)
+        .limit(1)
+        .maybeSingle();
+
+    if (error || !data) return null;
+    return { ...data, public_key: fromBase64(data.public_key) };
 }
 
 export async function getCredentialsByAppUserId(appUserId) {
-    await ensureWebAuthnTables();
-    const { rows } = await db.execute({
-        sql: 'SELECT * FROM webauthn_credentials WHERE app_user_id = ?',
-        args: [appUserId],
-    });
-    return rows;
+    const { data, error } = await supabase
+        .from('webauthn_credentials')
+        .select('*')
+        .eq('app_user_id', String(appUserId));
+
+    if (error) return [];
+    return (data || []).map(row => ({ ...row, public_key: fromBase64(row.public_key) }));
 }
 
 export async function deleteCredentialsByAppUserId(appUserId) {
-    await ensureWebAuthnTables();
-    await db.execute({
-        sql: 'DELETE FROM webauthn_credentials WHERE app_user_id = ?',
-        args: [appUserId],
-    });
+    const { error } = await supabase
+        .from('webauthn_credentials')
+        .delete()
+        .eq('app_user_id', String(appUserId));
+    if (error) throw error;
 }
 
 export async function countCredentialsByAppUserId(appUserId) {
-    await ensureWebAuthnTables();
-    const { rows } = await db.execute({
-        sql: 'SELECT COUNT(*) as count FROM webauthn_credentials WHERE app_user_id = ?',
-        args: [appUserId],
-    });
-    return Number(rows[0]?.count || 0);
+    const { count, error } = await supabase
+        .from('webauthn_credentials')
+        .select('*', { count: 'exact', head: true })
+        .eq('app_user_id', String(appUserId));
+    if (error) return 0;
+    return count || 0;
 }
