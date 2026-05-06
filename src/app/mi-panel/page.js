@@ -65,15 +65,6 @@ export default function SupervisorHomePage() {
     const [biometricCount, setBiometricCount] = useState(0);
     const [isBiometricLoading, setIsBiometricLoading] = useState(false);
 
-    // Pedido de insumos
-    const [supplies, setSupplies] = useState([]);
-    const [showSupplyForm, setShowSupplyForm] = useState(false);
-    const [supplyItems, setSupplyItems] = useState({});
-    const [requestNotes, setRequestNotes] = useState('');
-    const [isUrgent, setIsUrgent] = useState(false);
-    const [requestServiceId, setRequestServiceId] = useState('');
-    const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
-
     const selectedService = useMemo(() => {
         return services.find((service) => String(service.id) === selectedServiceId) || null;
     }, [selectedServiceId, services]);
@@ -270,68 +261,6 @@ export default function SupervisorHomePage() {
         }
     };
 
-    useEffect(() => {
-        fetch('/api/supplies')
-            .then(r => r.json())
-            .then(data => setSupplies(Array.isArray(data) ? data.filter(s => s.activo !== false) : []))
-            .catch(() => {});
-    }, []);
-
-    useEffect(() => {
-        if (showSupplyForm) setRequestServiceId(selectedServiceId);
-    }, [showSupplyForm, selectedServiceId]);
-
-    const setItemQty = (supplyId, qty) => {
-        setSupplyItems(prev => {
-            const next = { ...prev };
-            if (!qty || qty <= 0) delete next[supplyId];
-            else next[supplyId] = qty;
-            return next;
-        });
-    };
-
-    const handleSubmitRequest = async () => {
-        if (!requestServiceId) {
-            Swal.fire({ title: 'Seleccioná un servicio', icon: 'warning', confirmButtonColor: '#ef4444' });
-            return;
-        }
-        const items = Object.entries(supplyItems)
-            .filter(([, qty]) => qty > 0)
-            .map(([supply_id, cantidad]) => ({ supply_id: Number(supply_id), cantidad: Number(cantidad) }));
-
-        if (items.length === 0) {
-            Swal.fire({ title: 'Agregá al menos un insumo', icon: 'warning', confirmButtonColor: '#ef4444' });
-            return;
-        }
-
-        setIsSubmittingRequest(true);
-        try {
-            const res = await fetch('/api/supply-requests', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    supervisor_id: currentUser.id,
-                    service_id: Number(requestServiceId),
-                    items,
-                    notas: requestNotes.trim(),
-                    urgent: isUrgent,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Error al enviar el pedido');
-
-            Swal.fire({ title: 'Pedido enviado', text: 'El pedido fue registrado correctamente.', icon: 'success', confirmButtonColor: '#10b981' });
-            setSupplyItems({});
-            setRequestNotes('');
-            setIsUrgent(false);
-            setShowSupplyForm(false);
-        } catch (err) {
-            Swal.fire({ title: 'Error', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
-        } finally {
-            setIsSubmittingRequest(false);
-        }
-    };
-
     const handleRegisterBiometric = async () => {
         if (!currentUser?.app_user_id) return;
         setIsBiometricLoading(true);
@@ -504,108 +433,6 @@ export default function SupervisorHomePage() {
                         </div>
                     ) : null}
 
-                    {/* Pedido de insumos */}
-                    <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Pedido de insumos</p>
-                            <a href="/mi-panel/historico-pedidos" style={{ fontSize: '0.82rem', color: 'var(--primary-color)', textDecoration: 'none' }}>
-                                Ver historial →
-                            </a>
-                        </div>
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ width: '100%' }}
-                            onClick={() => setShowSupplyForm(v => !v)}
-                        >
-                            {showSupplyForm ? 'Cancelar pedido' : 'Nuevo pedido de insumos'}
-                        </button>
-
-                        {showSupplyForm && (
-                            <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                <div className="form-group">
-                                    <label>Servicio</label>
-                                    <select
-                                        value={requestServiceId}
-                                        onChange={e => setRequestServiceId(e.target.value)}
-                                    >
-                                        <option value="">Seleccioná un servicio</option>
-                                        {services.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Insumos</label>
-                                    {supplies.length === 0 ? (
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No hay insumos disponibles.</p>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            {supplies.map(supply => (
-                                                <div key={supply.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                    <span style={{ flex: 1, fontSize: '0.95rem' }}>
-                                                        {supply.nombre}
-                                                        {supply.unidad ? <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}> ({supply.unidad})</span> : null}
-                                                    </span>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '0.2rem 0.6rem', fontSize: '1rem', lineHeight: 1 }}
-                                                            onClick={() => setItemQty(supply.id, Math.max(0, (supplyItems[supply.id] || 0) - 1))}
-                                                        >−</button>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            value={supplyItems[supply.id] || ''}
-                                                            onChange={e => setItemQty(supply.id, Number(e.target.value))}
-                                                            style={{ width: '3.5rem', textAlign: 'center', padding: '0.2rem 0.3rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '0.2rem 0.6rem', fontSize: '1rem', lineHeight: 1 }}
-                                                            onClick={() => setItemQty(supply.id, (supplyItems[supply.id] || 0) + 1)}
-                                                        >+</button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Notas (opcional)</label>
-                                    <textarea
-                                        value={requestNotes}
-                                        onChange={e => setRequestNotes(e.target.value)}
-                                        placeholder="Aclaraciones sobre el pedido..."
-                                        rows={3}
-                                        style={{ width: '100%', resize: 'vertical' }}
-                                    />
-                                </div>
-
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={isUrgent}
-                                        onChange={e => setIsUrgent(e.target.checked)}
-                                    />
-                                    <span style={{ fontSize: '0.95rem' }}>Pedido urgente</span>
-                                </label>
-
-                                <button
-                                    type="button"
-                                    className="btn btn-primary"
-                                    onClick={handleSubmitRequest}
-                                    disabled={isSubmittingRequest}
-                                >
-                                    {isSubmittingRequest ? 'Enviando...' : 'Enviar pedido'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
         </MainLayout>

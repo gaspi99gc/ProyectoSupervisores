@@ -79,7 +79,7 @@ export default function MainLayout({ children }) {
                 {
                     title: 'Compras',
                     items: [
-                        { href: '/compras', label: 'Compras', icon: 'compras', active: pathname === '/compras' },
+                        { href: '/compras', label: 'Pedidos de Insumos', icon: 'compras', active: pathname === '/compras' },
                         { href: '/compras/servicios', label: 'Servicios', icon: 'servicios', active: pathname === '/compras/servicios' },
                         { href: '/compras/realizados', label: 'Pedidos Completos', icon: 'realizados', active: pathname === '/compras/realizados' },
                         { href: '/compras/insumos', label: 'Insumos', icon: 'supply', active: pathname === '/compras/insumos' },
@@ -106,6 +106,7 @@ export default function MainLayout({ children }) {
                 title: 'Supervisor',
                 items: [
                     { href: '/mi-panel', label: 'Presentismo', icon: 'presentismo', active: pathname === '/mi-panel' || pathname === '/mi-panel/presentismo' },
+                    { href: '/mi-panel/pedido-insumos', label: 'Pedido de Insumos', icon: 'supply', active: pathname === '/mi-panel/pedido-insumos' },
                     { href: '/mi-panel/historico-pedidos', label: 'Historico de Pedidos', icon: 'historico', active: pathname === '/mi-panel/historico-pedidos' },
                 ],
             },
@@ -167,6 +168,7 @@ export default function MainLayout({ children }) {
         if (pathname === '/compras/insumos') return 'Insumos';
         if (pathname === '/config') return 'Configuracion';
         if (pathname === '/mi-panel' || pathname === '/mi-panel/presentismo') return 'Presentismo';
+        if (pathname === '/mi-panel/pedido-insumos') return 'Pedido de Insumos';
         if (pathname === '/mi-panel/historico-pedidos') return 'Historico de Pedidos';
         return 'LASIA';
     };
