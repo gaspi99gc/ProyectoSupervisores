@@ -489,14 +489,14 @@ export default function PurchasesRequestsView({
     };
 
     return (
-        <div className="panel-max-wide purchases-panel-wide">
-            <div className="card" style={{ padding: 0 }}>
-                <div className="page-header" style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
-                    <div>
+        <div className="purchases-panel-wide">
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div className="purchases-header">
+                    <div className="purchases-header-text">
                         <h1>{title}</h1>
-                        <p style={{ color: 'var(--text-muted)' }}>{description}</p>
+                        <p>{description}</p>
                     </div>
-                    <div className="page-header-actions">
+                    <div className="purchases-header-actions">
                         <button type="button" className="btn btn-secondary" onClick={clearFilters}>
                             Limpiar filtros
                         </button>
@@ -509,7 +509,7 @@ export default function PurchasesRequestsView({
                     </div>
                 </div>
 
-                <div className="card purchases-filters-card" style={{ margin: '1rem auto 0' }}>
+                <div className="card purchases-filters-card">
                     <div className="page-header purchases-filters-header" style={{ marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                         <div>
                             <h3>Filtros</h3>
@@ -578,16 +578,16 @@ export default function PurchasesRequestsView({
                 </div>
 
                 {loading ? (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando pedidos...</div>
+                    <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Cargando pedidos...</div>
                 ) : error ? (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--error)', fontWeight: 600 }}>{error}</div>
+                    <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--error)', fontWeight: 600 }}>{error}</div>
                 ) : (
-                    <div className="table-container purchases-table-wrap" style={{ margin: '1rem' }}>
+                    <div className="table-container purchases-table-wrap">
                         <table className="table mobile-cards-table">
                             <thead>
                                 <tr>
-                                    <th className="purchases-id-col">Pedido #</th>
-                                    <th>Fecha y hora</th>
+                                    <th className="purchases-id-col">#</th>
+                                    <th>Fecha</th>
                                     <th>Supervisor</th>
                                     <th>Servicio</th>
                                     <th>Insumos</th>
@@ -598,20 +598,23 @@ export default function PurchasesRequestsView({
                             <tbody>
                                 {requests.length > 0 ? requests.map((request) => (
                                     <tr key={request.id}>
-                                        <td className="purchases-id-col" data-label="Pedido #"><strong>#{request.id}</strong></td>
-                                        <td data-label="Fecha y hora">{formatArgentinaDateTime(request.created_at)}</td>
+                                        <td className="purchases-id-col" data-label="#">
+                                            <strong style={{ fontSize: '0.9rem' }}>#{request.id}</strong>
+                                            {request.urgent ? <span className="badge badge-warning" style={{ marginLeft: '0.4rem', fontSize: '0.68rem', padding: '0.2rem 0.5rem' }}>URGENTE</span> : null}
+                                        </td>
+                                        <td data-label="Fecha" style={{ whiteSpace: 'nowrap' }}>{formatArgentinaDateTime(request.created_at)}</td>
                                         <td data-label="Supervisor">
                                             <strong>{request.supervisor_surname}, {request.supervisor_name}</strong>
                                         </td>
-                                        <td data-label="Servicio"><strong>{request.service_name}</strong></td>
+                                        <td data-label="Servicio">{request.service_name}</td>
                                         <td data-label="Insumos">
-                                            <strong>{getItemsSummary(request)}</strong>
-                                            <div style={{ marginTop: '0.45rem' }}>
+                                            <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>{getItemsSummary(request)}</span>
+                                            <div style={{ marginTop: '0.3rem' }}>
                                                 <button
                                                     type="button"
                                                     className="btn btn-secondary"
                                                     onClick={() => handleShowRequestDetail(request)}
-                                                    style={{ padding: '0.35rem 0.65rem', fontSize: '0.82rem' }}
+                                                    style={{ padding: '0.28rem 0.6rem', fontSize: '0.78rem' }}
                                                 >
                                                     Ver detalle
                                                 </button>
@@ -619,31 +622,29 @@ export default function PurchasesRequestsView({
                                         </td>
                                         <td data-label="Estado">
                                             {allowStatusEditing ? (
-                                                <div style={{ display: 'grid', gap: '0.35rem', width: '100%' }}>
-                                                    <select
-                                                        value={request.status}
-                                                        disabled={updatingRequestId === request.id}
-                                                        onChange={(e) => handleStatusChange(request, e.target.value)}
-                                                        style={{ width: '100%' }}
-                                                    >
-                                                        {EDITABLE_STATUS_OPTIONS.map((option) => (
-                                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
+                                                <select
+                                                    value={request.status}
+                                                    disabled={updatingRequestId === request.id}
+                                                    onChange={(e) => handleStatusChange(request, e.target.value)}
+                                                    style={{ width: '100%', fontSize: '0.85rem', padding: '0.35rem 0.5rem' }}
+                                                >
+                                                    {EDITABLE_STATUS_OPTIONS.map((option) => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
                                             ) : (
                                                 <span className={`badge ${getStatusBadgeClass(request.status)}`}>
                                                     {getStatusLabel(request.status)}
                                                 </span>
                                             )}
                                             {request.completed_at ? (
-                                                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                                                    {request.completed_by || 'Compras'} - {formatArgentinaDateTime(request.completed_at)}
+                                                <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                                                    {request.completed_by || 'Compras'} · {formatArgentinaDateTime(request.completed_at)}
                                                 </div>
                                             ) : null}
                                         </td>
                                         <td className="purchases-actions-cell mobile-hide-label" data-label="Acciones">
-                                            <div className="table-action-group purchases-actions-group">
+                                            <div className="purchases-actions-group">
                                                 {(() => {
                                                     const actionConfig = getPrimaryActionConfig(request.status);
                                                     return allowStatusEditing && actionConfig ? (
@@ -658,24 +659,24 @@ export default function PurchasesRequestsView({
                                                                 boxShadow: actionConfig.shadow,
                                                             }}
                                                         >
-                                                            {actionConfig.label}
+                                                            {updatingRequestId === request.id ? 'Guardando...' : actionConfig.label}
                                                         </button>
                                                     ) : null;
                                                 })()}
-                                                <button type="button" className="btn btn-secondary purchases-action-secondary" onClick={() => exportRequests([request], `Pedido_${request.id}`)}>
-                                                    <span className="desktop-only">Excel</span>
-                                                    <span className="mobile-only">📊</span>
-                                                </button>
-                                                <button type="button" className="btn btn-secondary purchases-action-secondary" onClick={() => exportRequestsPdf([request], `Pedido ${request.id}`, `Pedido_${request.id}`)}>
-                                                    <span className="desktop-only">PDF</span>
-                                                    <span className="mobile-only">📄</span>
-                                                </button>
+                                                <div className="purchases-secondary-row">
+                                                    <button type="button" className="btn btn-secondary purchases-action-secondary" onClick={() => exportRequests([request], `Pedido_${request.id}`)}>
+                                                        Excel
+                                                    </button>
+                                                    <button type="button" className="btn btn-secondary purchases-action-secondary" onClick={() => exportRequestsPdf([request], `Pedido ${request.id}`, `Pedido_${request.id}`)}>
+                                                        PDF
+                                                    </button>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                        <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                             No hay pedidos que coincidan con los filtros actuales.
                                         </td>
                                     </tr>
@@ -688,3 +689,4 @@ export default function PurchasesRequestsView({
         </div>
     );
 }
+

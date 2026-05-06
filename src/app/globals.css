@@ -708,22 +708,107 @@ label {
   margin: 0 auto;
 }
 
+.view-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.view-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
 .purchases-panel-wide {
-  max-width: 1380px;
+  max-width: 1340px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.purchases-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.75rem 1.75rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.purchases-header-text h1 {
+  font-size: 1.45rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+.purchases-header-text p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.purchases-header-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.purchases-header-actions .btn {
+  min-width: 90px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.88rem;
 }
 
 .purchases-filters-card {
-  max-width: 920px;
-  padding: 0.9rem 1rem !important;
+  max-width: none;
+  padding: 1rem 1.75rem !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  margin-bottom: 0 !important;
+}
+
+.purchases-filters-card:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 .purchases-table-wrap {
-  margin-left: auto !important;
-  margin-right: auto !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+.purchases-table-wrap table {
+  font-size: 0.9rem;
+}
+
+.purchases-table-wrap th {
+  padding: 0.75rem 1.25rem;
+  font-size: 0.78rem;
+}
+
+.purchases-table-wrap td {
+  padding: 0.85rem 1.25rem;
 }
 
 .purchases-filters-grid {
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
   gap: 0.75rem;
 }
 
@@ -744,7 +829,7 @@ label {
 
 .purchases-date-range-inputs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
   gap: 0.75rem;
 }
 
@@ -758,7 +843,8 @@ label {
 
 .purchases-quick-filters .btn {
   min-width: 0;
-  padding: 0.55rem 0.85rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.84rem;
 }
 
 .supervisor-home-view {
@@ -882,33 +968,42 @@ label {
 }
 
 .purchases-actions-cell {
-  text-align: center;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .purchases-id-col {
   white-space: nowrap;
-  min-width: 96px;
+  min-width: 90px;
 }
 
 .purchases-actions-group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(78px, 1fr));
-  gap: 0.45rem;
-  justify-items: center;
-  align-items: center;
-  min-width: 210px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+  min-width: 170px;
 }
 
 .purchases-action-primary {
-  grid-column: 1 / -1;
   width: 100%;
-  min-height: 44px;
+  min-height: 38px;
+  font-size: 0.84rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius-sm);
 }
 
 .purchases-action-secondary {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  min-width: 60px;
+}
+
+.purchases-secondary-row {
+  display: flex;
+  gap: 0.4rem;
   width: 100%;
-  min-width: 0;
+  justify-content: flex-end;
 }
 
 .historico-inline-label {
@@ -1235,9 +1330,11 @@ label {
   .purchases-actions-group {
     width: 100%;
     min-width: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
+    align-items: flex-start;
+  }
+
+  .purchases-secondary-row {
+    justify-content: flex-start;
   }
 
   .btn {
@@ -1250,6 +1347,19 @@ label {
     min-height: 0;
     padding: 0.5rem 0.7rem;
     font-size: 0.8rem;
+  }
+
+  .purchases-header {
+    padding: 1rem;
+  }
+
+  .purchases-filters-card {
+    padding: 0.75rem 1rem !important;
+  }
+
+  .purchases-table-wrap th,
+  .purchases-table-wrap td {
+    padding: 0.65rem 1rem;
   }
 }
 
