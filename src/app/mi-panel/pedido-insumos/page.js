@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 import MainLayout from '@/components/MainLayout';
+import SearchableSelect from '@/components/SearchableSelect';
 import { getSessionUser } from '@/lib/session';
 
 export default function PedidoInsumosPage() {
@@ -100,12 +101,13 @@ export default function PedidoInsumosPage() {
                     <div className="supervisor-home-panel" style={{ maxWidth: '600px' }}>
                         <div className="form-group">
                             <label>Servicio</label>
-                            <select value={serviceId} onChange={e => setServiceId(e.target.value)}>
-                                <option value="">Seleccioná un servicio</option>
-                                {services.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                            </select>
+                            <SearchableSelect
+                                options={services.map(s => ({ value: s.id, label: s.name }))}
+                                value={serviceId}
+                                onChange={setServiceId}
+                                placeholder="Seleccioná un servicio"
+                                searchPlaceholder="Buscar servicio..."
+                            />
                         </div>
 
                         <div className="form-group" style={{ marginTop: '1.25rem' }}>
