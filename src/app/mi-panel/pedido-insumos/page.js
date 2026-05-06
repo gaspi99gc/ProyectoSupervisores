@@ -92,9 +92,6 @@ export default function PedidoInsumosPage() {
             <div className="view-container">
                 <div className="view-header">
                     <h1 className="view-title">Pedido de Insumos</h1>
-                    <a href="/mi-panel/historico-pedidos" className="btn btn-secondary">
-                        Ver historial
-                    </a>
                 </div>
 
                 {isLoading ? (
