@@ -31,7 +31,7 @@ function buildSupabaseQuery(searchParams) {
 
     let query = supabase
         .from('supply_requests')
-        .select('*, services:service_id(name, address), supervisors:supervisor_id(name, surname, dni), providers:provider_id(name)')
+        .select('*, services:service_id(name, address), supervisors:supervisor_id(id, app_users(name, surname, username)), providers:provider_id(name)')
         .order('created_at', { ascending: false });
 
     const normalizedStatus = normalizeStatusFilter(status);
@@ -87,9 +87,9 @@ export async function GET(req) {
                 ...row,
                 service_name: row.services?.name || null,
                 service_address: row.services?.address || null,
-                supervisor_name: row.supervisors?.name || null,
-                supervisor_surname: row.supervisors?.surname || null,
-                supervisor_dni: row.supervisors?.dni || null,
+                supervisor_name: row.supervisors?.app_users?.name || null,
+                supervisor_surname: row.supervisors?.app_users?.surname || null,
+                supervisor_dni: row.supervisors?.app_users?.username || null,
                 provider_name: row.providers?.name || null,
                 services: undefined,
                 supervisors: undefined,
