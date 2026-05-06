@@ -80,6 +80,7 @@ export default function MainLayout({ children }) {
                     title: 'Compras',
                     items: [
                         { href: '/compras', label: 'Pedidos de Insumos', icon: 'compras', active: pathname === '/compras' },
+                        { href: '/compras/pedido-insumos', label: 'Crear Pedido', icon: 'supply', active: pathname === '/compras/pedido-insumos' },
                         { href: '/compras/servicios', label: 'Servicios', icon: 'servicios', active: pathname === '/compras/servicios' },
                         { href: '/compras/realizados', label: 'Pedidos Completos', icon: 'realizados', active: pathname === '/compras/realizados' },
                         { href: '/compras/insumos', label: 'Insumos', icon: 'supply', active: pathname === '/compras/insumos' },
@@ -169,6 +170,7 @@ export default function MainLayout({ children }) {
         if (pathname === '/config') return 'Configuracion';
         if (pathname === '/mi-panel' || pathname === '/mi-panel/presentismo') return 'Presentismo';
         if (pathname === '/mi-panel/pedido-insumos') return 'Pedido de Insumos';
+        if (pathname === '/compras/pedido-insumos') return 'Crear Pedido';
         if (pathname === '/mi-panel/historico-pedidos') return 'Historico de Pedidos';
         return 'LASIA';
     };
