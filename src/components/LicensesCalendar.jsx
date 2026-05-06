@@ -3,135 +3,332 @@
 import { useState, useMemo } from 'react';
 
 const LICENSE_TYPES = {
-    vacaciones: { label: 'Vacaciones', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
-    enfermedad: { label: 'Enfermedad', color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)' },
-    maternidad: { label: 'Maternidad', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)' },
-    paternidad: { label: 'Paternidad', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)' },
-    psiquiatrica: { label: 'Psiquiátrica', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
-    sin_goce: { label: 'Sin goce', color: '#6b7280', bg: 'rgba(107, 114, 128, 0.15)' }
+    vacaciones: { label: 'Vacaciones', color: '#3b82f6' },
+    enfermedad: { label: 'Enfermedad', color: '#eab308' },
+    maternidad: { label: 'Maternidad', color: '#a855f7' },
+    paternidad: { label: 'Paternidad', color: '#a855f7' },
+    psiquiatrica: { label: 'Psiquiátrica', color: '#ef4444' },
+    sin_goce: { label: 'Sin goce', color: '#6b7280' },
 };
 
 const MONTH_NAMES = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
-
 const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
-export default function LicensesCalendar({ licenses, onDateClick, onLicenseClick }) {
+const DAY_NUM_HEIGHT = 26;
+const BAR_H = 20;
+const BAR_GAP = 3;
+const MAX_BARS = 3;
+const ROW_HEIGHT = DAY_NUM_HEIGHT + MAX_BARS * (BAR_H + BAR_GAP) + 10;
+
+export default function LicensesCalendar({ licenses, onLicenseClick }) {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [tooltip, setTooltip] = useState(null);
-    
+    const [hiddenTypes, setHiddenTypes] = useState(new Set());
+
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    
-    const calendarDays = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+
+    const visibleLicenses = useMemo(() => {
+        return licenses
+            .map((l) => ({
+                ...l,
+                start_date: l.start_date?.slice(0, 10),
+                end_date: l.end_date?.slice(0, 10),
+            }))
+            .filter((l) => !hiddenTypes.has(l.type));
+    }, [licenses, hiddenTypes]);
+
+    const weeks = useMemo(() => {
         const firstDay = new Date(year, month, 1);
         const lastDay = new Date(year, month + 1, 0);
-        const startPadding = firstDay.getDay();
         const daysInMonth = lastDay.getDate();
-        
-        const days = [];
-        
-        // Días del mes anterior (padding)
-        for (let i = 0; i < startPadding; i++) {
-            days.push({ day: null, date: null, licenses: [] });
+        const startPadding = firstDay.getDay();
+
+        const cells = [];
+        for (let i = 0; i < startPadding; i++) cells.push(null);
+        for (let d = 1; d <= daysInMonth; d++) {
+            cells.push(
+                `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            );
         }
-        
-        // Días del mes actual
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const dayLicenses = licenses.filter(l => {
-                return dateStr >= l.start_date && dateStr <= l.end_date;
+        while (cells.length % 7 !== 0) cells.push(null);
+
+        const result = [];
+        for (let i = 0; i < cells.length; i += 7) result.push(cells.slice(i, i + 7));
+        return result;
+    }, [year, month]);
+
+    const weeksWithBars = useMemo(() => {
+        return weeks.map((week) => {
+            const validDates = week.filter(Boolean);
+            if (validDates.length === 0) return { week, bars: [], overflow: 0 };
+
+            const weekStart = validDates[0];
+            const weekEnd = validDates[validDates.length - 1];
+
+            const overlapping = visibleLicenses
+                .filter((l) => l.start_date <= weekEnd && l.end_date >= weekStart)
+                .sort((a, b) =>
+                    a.start_date.localeCompare(b.start_date) ||
+                    a.end_date.localeCompare(b.end_date)
+                );
+
+            const bars = overlapping.map((license) => {
+                const barStart = license.start_date > weekStart ? license.start_date : weekStart;
+                const barEnd = license.end_date < weekEnd ? license.end_date : weekEnd;
+                const startCol = week.indexOf(barStart);
+                const endCol = week.indexOf(barEnd);
+                return {
+                    license,
+                    startCol: startCol === -1 ? 0 : startCol,
+                    endCol: endCol === -1 ? 6 : endCol,
+                    continuesBefore: license.start_date < weekStart,
+                    continuesAfter: license.end_date > weekEnd,
+                };
             });
-            days.push({ day, date: dateStr, licenses: dayLicenses });
-        }
-        
-        return days;
-    }, [year, month, licenses]);
-    
+
+            return { week, bars: bars.slice(0, MAX_BARS), overflow: Math.max(0, bars.length - MAX_BARS) };
+        });
+    }, [weeks, visibleLicenses]);
+
+    const toggleType = (type) => {
+        setHiddenTypes((prev) => {
+            const next = new Set(prev);
+            if (next.has(type)) next.delete(type);
+            else next.add(type);
+            return next;
+        });
+    };
+
     const goToPrevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
     const goToNextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
     const goToToday = () => setCurrentDate(new Date());
-    
-    const today = new Date().toISOString().split('T')[0];
-    
+
     return (
-        <div className="licenses-calendar">
-            <div className="calendar-header">
-                <div className="calendar-nav">
-                    <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={goToPrevMonth}>◀</button>
-                    <h3>{MONTH_NAMES[month]} {year}</h3>
-                    <button className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={goToNextMonth}>▶</button>
-                </div>
-                <button className="btn btn-primary" style={{ padding: '0.3rem 0.8rem', fontSize: '0.8rem' }} onClick={goToToday}>Hoy</button>
-            </div>
-            
-            <div className="calendar-legend">
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            {/* Sidebar */}
+            <div
+                className="card"
+                style={{ minWidth: '150px', padding: '1rem', flexShrink: 0 }}
+            >
+                <p
+                    style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: 'var(--text-muted)',
+                        marginBottom: '0.75rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                    }}
+                >
+                    Tipos
+                </p>
                 {Object.entries(LICENSE_TYPES).map(([key, type]) => (
-                    <div key={key} className="legend-item">
-                        <span className="legend-dot" style={{ background: type.color }}></span>
-                        <span>{type.label}</span>
-                    </div>
+                    <label
+                        key={key}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            cursor: 'pointer',
+                            marginBottom: '0.55rem',
+                            fontSize: '0.85rem',
+                            userSelect: 'none',
+                        }}
+                    >
+                        <input
+                            type="checkbox"
+                            checked={!hiddenTypes.has(key)}
+                            onChange={() => toggleType(key)}
+                            style={{ accentColor: type.color, width: 14, height: 14, flexShrink: 0 }}
+                        />
+                        <span
+                            style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 2,
+                                background: type.color,
+                                flexShrink: 0,
+                                opacity: hiddenTypes.has(key) ? 0.3 : 1,
+                            }}
+                        />
+                        <span
+                            style={{
+                                color: hiddenTypes.has(key) ? 'var(--text-muted)' : 'inherit',
+                                textDecoration: hiddenTypes.has(key) ? 'line-through' : 'none',
+                            }}
+                        >
+                            {type.label}
+                        </span>
+                    </label>
                 ))}
             </div>
-            
-            <div className="calendar-grid">
-                {DAY_NAMES.map(day => (
-                    <div key={day} className="calendar-day-header">{day}</div>
-                ))}
-                
-                {calendarDays.map((dayData, index) => (
-                    <div
-                        key={index}
-                        className={`calendar-day ${dayData.date === today ? 'today' : ''} ${!dayData.day ? 'empty' : ''}`}
-                        onClick={() => dayData.day && onDateClick?.(dayData.date, dayData.licenses)}
-                        onMouseEnter={(e) => {
-                            if (dayData.licenses.length > 0) {
-                                setTooltip({
-                                    x: e.clientX,
-                                    y: e.clientY,
-                                    licenses: dayData.licenses
-                                });
-                            }
-                        }}
-                        onMouseLeave={() => setTooltip(null)}
+
+            {/* Calendar */}
+            <div className="licenses-calendar" style={{ flex: 1, minWidth: 0 }}>
+                <div className="calendar-header">
+                    <div className="calendar-nav">
+                        <button
+                            className="btn btn-secondary"
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                            onClick={goToPrevMonth}
+                        >
+                            ◀
+                        </button>
+                        <h3>
+                            {MONTH_NAMES[month]} {year}
+                        </h3>
+                        <button
+                            className="btn btn-secondary"
+                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                            onClick={goToNextMonth}
+                        >
+                            ▶
+                        </button>
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        style={{ padding: '0.3rem 0.8rem', fontSize: '0.8rem' }}
+                        onClick={goToToday}
                     >
-                        {dayData.day && (
-                            <>
-                                <span className="day-number">{dayData.day}</span>
-                                <div className="day-licenses">
-                                    {dayData.licenses.slice(0, 4).map((license, i) => (
-                                        <div
-                                            key={i}
-                                            className="license-dot"
-                                            style={{ background: LICENSE_TYPES[license.type]?.color || '#666' }}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onLicenseClick?.(license);
-                                            }}
-                                        />
-                                    ))}
-                                    {dayData.licenses.length > 4 && (
-                                        <span className="license-more">+{dayData.licenses.length - 4}</span>
-                                    )}
+                        Hoy
+                    </button>
+                </div>
+
+                {/* Day headers */}
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(7, 1fr)',
+                        borderBottom: '1px solid var(--border-color)',
+                    }}
+                >
+                    {DAY_NAMES.map((d) => (
+                        <div key={d} className="calendar-day-header">
+                            {d}
+                        </div>
+                    ))}
+                </div>
+
+                {/* Week rows */}
+                {weeksWithBars.map((weekData, wi) => (
+                    <div
+                        key={wi}
+                        style={{
+                            position: 'relative',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(7, 1fr)',
+                            height: `${ROW_HEIGHT}px`,
+                            borderBottom: '1px solid var(--border-color)',
+                        }}
+                    >
+                        {/* Day cells */}
+                        {weekData.week.map((date, di) => (
+                            <div
+                                key={di}
+                                style={{
+                                    borderRight: di < 6 ? '1px solid var(--border-color)' : 'none',
+                                    background:
+                                        date === today
+                                            ? 'var(--color-primary-light, rgba(59,130,246,0.07))'
+                                            : !date
+                                            ? 'var(--color-muted-surface)'
+                                            : 'transparent',
+                                    paddingTop: '4px',
+                                    paddingLeft: '6px',
+                                }}
+                            >
+                                {date && (
+                                    <span
+                                        style={{
+                                            fontSize: '0.78rem',
+                                            fontWeight: date === today ? 700 : 400,
+                                            color:
+                                                date === today
+                                                    ? 'var(--color-primary, #3b82f6)'
+                                                    : 'var(--text-color)',
+                                        }}
+                                    >
+                                        {Number(date.split('-')[2])}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+
+                        {/* License bars */}
+                        {weekData.bars.map((bar, bi) => {
+                            const color = LICENSE_TYPES[bar.license.type]?.color || '#666';
+                            const leftPct = (bar.startCol / 7) * 100;
+                            const widthPct = ((bar.endCol - bar.startCol + 1) / 7) * 100;
+                            const top = DAY_NUM_HEIGHT + bi * (BAR_H + BAR_GAP);
+                            const marginH = 3;
+
+                            return (
+                                <div
+                                    key={bi}
+                                    title={`${bar.license.apellido}, ${bar.license.nombre} — ${LICENSE_TYPES[bar.license.type]?.label}`}
+                                    onClick={() => onLicenseClick?.(bar.license)}
+                                    style={{
+                                        position: 'absolute',
+                                        top: `${top}px`,
+                                        left: `calc(${leftPct}% + ${bar.continuesBefore ? 0 : marginH}px)`,
+                                        width: `calc(${widthPct}% - ${(bar.continuesBefore ? 0 : marginH) + (bar.continuesAfter ? 0 : marginH)}px)`,
+                                        height: `${BAR_H}px`,
+                                        background: color + '28',
+                                        borderLeft: bar.continuesBefore ? 'none' : `3px solid ${color}`,
+                                        borderTop: `1px solid ${color}55`,
+                                        borderBottom: `1px solid ${color}55`,
+                                        borderRight: bar.continuesAfter ? 'none' : `1px solid ${color}55`,
+                                        borderRadius: bar.continuesBefore
+                                            ? bar.continuesAfter
+                                                ? '0'
+                                                : '0 4px 4px 0'
+                                            : bar.continuesAfter
+                                            ? '4px 0 0 4px'
+                                            : '0 4px 4px 0',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        paddingLeft: bar.continuesBefore ? '4px' : '5px',
+                                        paddingRight: '4px',
+                                        overflow: 'hidden',
+                                        zIndex: 1,
+                                        fontSize: '0.7rem',
+                                        color,
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap',
+                                        textOverflow: 'ellipsis',
+                                        transition: 'filter 0.15s',
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(0.88)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.filter = '')}
+                                >
+                                    {!bar.continuesBefore && `${bar.license.apellido}, ${bar.license.nombre}`}
                                 </div>
-                            </>
+                            );
+                        })}
+
+                        {/* Overflow */}
+                        {weekData.overflow > 0 && (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    bottom: '4px',
+                                    right: '6px',
+                                    fontSize: '0.68rem',
+                                    color: 'var(--text-muted)',
+                                    fontWeight: 500,
+                                }}
+                            >
+                                +{weekData.overflow} más
+                            </div>
                         )}
                     </div>
                 ))}
             </div>
-            
-            {tooltip && (
-                <div className="calendar-tooltip" style={{ left: tooltip.x + 10, top: tooltip.y + 10 }}>
-                    {tooltip.licenses.map((license, i) => (
-                        <div key={i} className="tooltip-item">
-                            <span className="tooltip-dot" style={{ background: LICENSE_TYPES[license.type]?.color }} ></span>
-                            <span>{license.apellido}, {license.nombre} - {LICENSE_TYPES[license.type]?.label}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 }

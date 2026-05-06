@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Swal from 'sweetalert2';
@@ -11,6 +11,8 @@ export default function LoginScreen() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const passwordRef = useRef(null);
     const [themeMode, setThemeMode] = useState('light');
     const router = useRouter();
 
@@ -28,41 +30,30 @@ export default function LoginScreen() {
         localStorage.setItem('themeMode', themeMode);
     }, [themeMode]);
 
+    const ROLE_REDIRECT = {
+        admin: '/',
+        purchases: '/compras',
+        supervisor: '/mi-panel',
+        jefe_operativo: '/presentismo-admin',
+    };
+
     const handleQuickAccess = async (role) => {
         setError('');
-
-        if (role === 'admin') {
-            const user = { id: 0, name: 'Admin', surname: 'LASIA', dni: 'admin', role: 'admin' };
-            saveSession(user);
-            router.push('/');
-            return;
-        }
-
-        if (role === 'purchases') {
-            const user = { id: -10, name: 'Compras', surname: 'LASIA', dni: 'compras', role: 'purchases' };
-            saveSession(user);
-            router.push('/compras');
-            return;
-        }
-
         try {
-            const res = await fetch('/api/auth/login', {
+            const res = await fetch('/api/auth/quick-access', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: 'supervisor', password: 'supervisor' })
+                body: JSON.stringify({ role }),
             });
-
             const data = await res.json();
-
             if (res.ok && data.user) {
                 saveSession(data.user);
-                router.push('/mi-panel');
-                return;
+                router.push(ROLE_REDIRECT[role] || '/');
+            } else {
+                setError(data.error || 'No se pudo ingresar.');
             }
-
-            setError(data.error || 'No se pudo ingresar con el perfil supervisor.');
-        } catch (err) {
-            setError('Error de conexión al servidor.');
+        } catch {
+            setError('Error de conexión.');
         }
     };
 
@@ -86,11 +77,13 @@ export default function LoginScreen() {
 
                 // Redirigir según rol
                 if (data.user.role === 'admin') {
-                    router.push('/'); // Dashboard Admin
+                    router.push('/');
                 } else if (data.user.role === 'purchases') {
                     router.push('/compras');
+                } else if (data.user.role === 'jefe_operativo') {
+                    router.push('/presentismo-admin');
                 } else {
-                    router.push('/mi-panel'); // Panel Supervisor
+                    router.push('/mi-panel');
                 }
             } else {
                 setError(data.error || 'Usuario o contraseña incorrectos.');
@@ -200,16 +193,32 @@ export default function LoginScreen() {
                     </div>
                     <div className="form-group">
                         <label>Contraseña</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Ingrese su contraseña"
-                            required
-                        />
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                ref={passwordRef}
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Ingrese su contraseña"
+                                required
+                                style={{ width: '100%', paddingRight: '2.5rem' }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(v => !v)}
+                                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, lineHeight: 1 }}
+                                tabIndex={-1}
+                            >
+                                {showPassword ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                )}
+                            </button>
+                        </div>
                     </div>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '-0.25rem', marginBottom: '0.75rem' }}>
-                        Para supervisores, el usuario es su DNI. Temporalmente también podés entrar con `supervisor / supervisor` para revisar la vista inicial.
+                        Para supervisores, el usuario es su DNI.
                     </p>
                     {error && <p className="error-message" style={{ color: 'var(--error)', marginBottom: '10px', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center' }}>{error}</p>}
                     <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.8rem 1rem', fontSize: '1.1rem', marginTop: '1rem' }}>
@@ -238,6 +247,14 @@ export default function LoginScreen() {
                             onClick={() => handleQuickAccess('supervisor')}
                         >
                             Entrar como Supervisor
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ width: '100%', padding: '0.8rem 1rem' }}
+                            onClick={() => handleQuickAccess('jefe_operativo')}
+                        >
+                            Entrar como Jefe Operativo
                         </button>
                         <button
                             type="button"

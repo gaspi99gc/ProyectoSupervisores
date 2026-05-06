@@ -1,6 +1,5 @@
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/db';
 
-// Haversine formula
 function haversineDistance(lat1, lng1, lat2, lng2) {
     const R = 6371e3;
     const φ1 = lat1 * Math.PI / 180;
@@ -25,52 +24,52 @@ export async function GET(req) {
         const { searchParams } = new URL(req.url);
         const supervisorId = searchParams.get('supervisor_id');
         const serviceId = searchParams.get('service_id');
-        const active = searchParams.get('active'); // 'true' to get only active (unclosed) check-ins
-        const today = searchParams.get('today'); // 'true' to get only today's records
+        const active = searchParams.get('active');
+        const today = searchParams.get('today');
 
-        let query = `
-      SELECT a.*, s.name as service_name, s.address as service_address, 
-             sup.name as supervisor_name, sup.surname as supervisor_surname
-      FROM attendance a
-      JOIN services s ON a.service_id = s.id
-      JOIN supervisors sup ON a.supervisor_id = sup.id
-    `;
-        const conditions = [];
-        const args = [];
+        let query = supabase
+            .from('attendance')
+            .select('*, services:service_id(name, address), supervisors:supervisor_id(app_users(name, surname))')
+            .order('timestamp', { ascending: false });
 
-        if (supervisorId) {
-            conditions.push('a.supervisor_id = ?');
-            args.push(supervisorId);
-        }
-
-        if (serviceId) {
-            conditions.push('a.service_id = ?');
-            args.push(serviceId);
-        }
-
-        if (active === 'true') {
-            // Find check-ins that don't have a corresponding check-out
-            conditions.push(`a.type = 'check-in'`);
-            conditions.push(`NOT EXISTS (
-                SELECT 1 FROM attendance a2 
-                WHERE a2.supervisor_id = a.supervisor_id 
-                AND a2.service_id = a.service_id 
-                AND a2.type = 'check-out' 
-                AND a2.timestamp > a.timestamp
-            )`);
-        }
+        if (supervisorId) query = query.eq('supervisor_id', supervisorId);
+        if (serviceId) query = query.eq('service_id', serviceId);
 
         if (today === 'true') {
-            conditions.push(`date(datetime(a.timestamp, '-3 hours')) = date(datetime('now', '-3 hours'))`);
+            // Argentina is UTC-3: today starts at 03:00 UTC
+            const now = new Date();
+            const argOffset = 3 * 60 * 60 * 1000;
+            const argNow = new Date(now.getTime() - argOffset);
+            const todayStr = argNow.toISOString().split('T')[0];
+            const startUTC = `${todayStr}T03:00:00.000Z`;
+            query = query.gte('timestamp', startUTC);
         }
 
-        if (conditions.length > 0) {
-            query += ` WHERE ${conditions.join(' AND ')}`;
+        const { data, error } = await query;
+        if (error) throw error;
+
+        let rows = (data || []).map(a => ({
+            ...a,
+            service_name: a.services?.name || null,
+            service_address: a.services?.address || null,
+            supervisor_name: a.supervisors?.app_users?.name || null,
+            supervisor_surname: a.supervisors?.app_users?.surname || null,
+            services: undefined,
+            supervisors: undefined,
+        }));
+
+        if (active === 'true') {
+            rows = rows.filter(a => {
+                if (a.type !== 'check-in') return false;
+                return !rows.some(a2 =>
+                    a2.supervisor_id === a.supervisor_id &&
+                    a2.service_id === a.service_id &&
+                    a2.type === 'check-out' &&
+                    a2.timestamp > a.timestamp
+                );
+            });
         }
 
-        query += ' ORDER BY a.timestamp DESC';
-
-        const { rows } = await db.execute({ sql: query, args });
         return Response.json(rows);
     } catch (error) {
         console.error('Error fetching attendance:', error);
@@ -82,63 +81,62 @@ export async function POST(req) {
     try {
         const { supervisor_id, service_id, type, lat, lng } = await req.json();
 
-        // Validation: Check for active (unclosed) check-in
-        const { rows: activeCheckins } = await db.execute({
-            sql: `SELECT a.*, s.name as service_name FROM attendance a
-                  JOIN services s ON a.service_id = s.id
-                  WHERE a.supervisor_id = ? AND a.type = 'check-in'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM attendance a2 
-                      WHERE a2.supervisor_id = a.supervisor_id 
-                      AND a2.service_id = a.service_id 
-                      AND a2.type = 'check-out' 
-                      AND a2.timestamp > a.timestamp
-                  )
-                  ORDER BY a.timestamp DESC LIMIT 1`,
-            args: [supervisor_id]
+        const { data: allRecords } = await supabase
+            .from('attendance')
+            .select('*, services:service_id(name)')
+            .eq('supervisor_id', supervisor_id)
+            .order('timestamp', { ascending: false });
+
+        const records = allRecords || [];
+
+        // Find active check-in: a check-in with no subsequent check-out for same service
+        const activeCheckin = records.find(a => {
+            if (a.type !== 'check-in') return false;
+            return !records.some(a2 =>
+                a2.service_id === a.service_id &&
+                a2.type === 'check-out' &&
+                a2.timestamp > a.timestamp
+            );
         });
 
-        const hasActiveCheckin = activeCheckins.length > 0;
-        const activeCheckin = hasActiveCheckin ? activeCheckins[0] : null;
+        const hasActiveCheckin = Boolean(activeCheckin);
 
         if (type === 'check-in' && hasActiveCheckin) {
             return Response.json({
-                error: `Ya tenés una entrada activa en "${activeCheckin.service_name}". Fichá la salida primero.`,
-                active_checkin: activeCheckin
+                error: `Ya tenés una entrada activa en "${activeCheckin.services?.name}". Fichá la salida primero.`,
+                active_checkin: { ...activeCheckin, service_name: activeCheckin.services?.name }
             }, { status: 400 });
         }
 
         if (type === 'check-out' && (!hasActiveCheckin || activeCheckin.service_id !== service_id)) {
-            return Response.json({
-                error: 'No hay una entrada activa para este servicio.',
-            }, { status: 400 });
+            return Response.json({ error: 'No hay una entrada activa para este servicio.' }, { status: 400 });
         }
 
-        // Get service coordinates and calculate distance
-        const service = await db.execute({
-            sql: 'SELECT lat, lng FROM services WHERE id = ?',
-            args: [service_id]
-        });
+        const { data: service } = await supabase
+            .from('services')
+            .select('lat, lng')
+            .eq('id', service_id)
+            .single();
 
         let verified = false;
         let distance_meters = null;
         let zone = 'red';
 
-        if (service.rows.length > 0 && service.rows[0].lat && service.rows[0].lng) {
-            const sLat = service.rows[0].lat;
-            const sLng = service.rows[0].lng;
-            distance_meters = haversineDistance(lat, lng, sLat, sLng);
+        if (service?.lat && service?.lng) {
+            distance_meters = haversineDistance(lat, lng, service.lat, service.lng);
             zone = getZone(distance_meters);
             verified = zone === 'green';
         }
 
-        const result = await db.execute({
-            sql: `INSERT INTO attendance (supervisor_id, service_id, type, lat, lng, verified, distance_meters, zone) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-            args: [supervisor_id, service_id, type, lat, lng, verified ? 1 : 0, distance_meters, zone]
-        });
+        const { data: result, error } = await supabase
+            .from('attendance')
+            .insert({ supervisor_id, service_id, type, lat, lng, verified, distance_meters, zone })
+            .select()
+            .single();
 
-        return Response.json(result.rows[0], { status: 201 });
+        if (error) throw error;
+
+        return Response.json(result, { status: 201 });
     } catch (error) {
         console.error('Error recording attendance:', error);
         return Response.json({ error: 'Failed to record attendance' }, { status: 500 });

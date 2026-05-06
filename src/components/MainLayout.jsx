@@ -20,6 +20,8 @@ function NavIcon({ name }) {
         rrhh: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 8v6" /><path d="M23 11h-6" /></>,
         supervisors: <><path d="M12 20h9" /><path d="M12 4h9" /><path d="M12 12h9" /><path d="M3 6h4" /><path d="M3 12h4" /><path d="M3 18h4" /><path d="M9 4v4" /><path d="M9 10v4" /><path d="M9 16v4" /></>,
         presentismo: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+        users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+        supply: <><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></>,
         config: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.09V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9.2 20a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.09-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4 9.2a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.09V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 14 4a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.27.3.47.65.6 1 .08.28.38.6 1.09.6H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.4Z" /></>,
         compras: <><circle cx="9" cy="20" r="1" /><circle cx="18" cy="20" r="1" /><path d="M3 4h2l2.2 10.5a1 1 0 0 0 1 .8h9.8a1 1 0 0 0 1-.76L21 7H7" /></>,
         servicios: <><path d="M12 21s-6-4.35-6-10a6 6 0 1 1 12 0c0 5.65-6 10-6 10Z" /><circle cx="12" cy="11" r="2.5" /></>,
@@ -65,6 +67,7 @@ export default function MainLayout({ children }) {
                 {
                     title: 'Sistema',
                     items: [
+                        { href: '/usuarios', label: 'Usuarios', icon: 'users', active: pathname === '/usuarios' },
                         { href: '/config', label: 'Configuracion', icon: 'config', active: pathname === '/config' },
                     ],
                 },
@@ -79,6 +82,20 @@ export default function MainLayout({ children }) {
                         { href: '/compras', label: 'Compras', icon: 'compras', active: pathname === '/compras' },
                         { href: '/compras/servicios', label: 'Servicios', icon: 'servicios', active: pathname === '/compras/servicios' },
                         { href: '/compras/realizados', label: 'Pedidos Completos', icon: 'realizados', active: pathname === '/compras/realizados' },
+                        { href: '/compras/insumos', label: 'Insumos', icon: 'supply', active: pathname === '/compras/insumos' },
+                    ],
+                },
+            ];
+        }
+
+        if (currentUser?.role === 'jefe_operativo') {
+            return [
+                {
+                    title: 'Jefe Operativo',
+                    items: [
+                        { href: '/presentismo-admin', label: 'Presentismo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                        { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
+                        { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
                     ],
                 },
             ];
@@ -146,6 +163,8 @@ export default function MainLayout({ children }) {
         if (pathname === '/rrhh' || pathname === '/periodo-prueba') return 'RRHH';
         if (pathname === '/supervisores') return 'Supervisores';
         if (pathname === '/presentismo-admin') return 'Presentismo';
+        if (pathname === '/usuarios') return 'Usuarios';
+        if (pathname === '/compras/insumos') return 'Insumos';
         if (pathname === '/config') return 'Configuracion';
         if (pathname === '/mi-panel' || pathname === '/mi-panel/presentismo') return 'Presentismo';
         if (pathname === '/mi-panel/historico-pedidos') return 'Historico de Pedidos';

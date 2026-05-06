@@ -80,40 +80,18 @@ export default function SupervisorHomePage() {
                     return;
                 }
 
-                const parsedUser = storedUser;
-                let resolvedUser = parsedUser;
+                const resolvedUser = storedUser;
 
-                if (
-                    parsedUser.role === 'supervisor'
-                    && (!parsedUser.id || Number(parsedUser.id) <= 0)
-                    && parsedUser.dni === 'supervisor'
-                ) {
-                    const loginResponse = await fetch('/api/auth/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: 'supervisor', password: 'supervisor' })
-                    });
-
-                    const loginData = await loginResponse.json().catch(() => ({}));
-
-                    if (!loginResponse.ok || !loginData.user) {
-                        throw new Error(loginData.error || 'No se pudo restaurar el perfil del supervisor. Volvé a iniciar sesión.');
-                    }
-
-                    resolvedUser = loginData.user;
-                    saveSession(resolvedUser);
-                }
-
-                if (cancelled) {
-                    return;
-                }
+                if (cancelled) return;
 
                 setCurrentUser(resolvedUser);
 
                 const supervisorId = Number(resolvedUser?.id);
 
-                if (resolvedUser?.role !== 'supervisor' || !Number.isFinite(supervisorId) || supervisorId <= 0) {
-                    throw new Error('El perfil del supervisor no es valido. Volvé a iniciar sesión.');
+                // Acceso rápido sin ID real — mostrar panel vacío
+                if (!Number.isFinite(supervisorId) || supervisorId <= 0) {
+                    setIsLoading(false);
+                    return;
                 }
 
                 const response = await fetch(`/api/supervisor-status?supervisor_id=${supervisorId}`);

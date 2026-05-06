@@ -11,8 +11,7 @@ export async function GET(request) {
             .from('licenses')
             .select(`
                 *,
-                employees:employee_id (nombre, apellido, legajo, servicio_id),
-                services:servicio_id (name)
+                employees:employee_id (nombre, apellido, legajo)
             `)
             .order('start_date', { ascending: false });
         
@@ -35,13 +34,13 @@ export async function GET(request) {
             return Response.json({ error: 'Failed to fetch licenses: ' + error.message }, { status: 500 });
         }
         
-        // Transform data to match expected format
         const transformed = data.map(row => ({
             ...row,
             nombre: row.employees?.nombre,
             apellido: row.employees?.apellido,
             legajo: row.employees?.legajo,
-            service_name: row.services?.name
+            start_date: row.start_date?.slice(0, 10),
+            end_date: row.end_date?.slice(0, 10),
         }));
         
         return Response.json(transformed);

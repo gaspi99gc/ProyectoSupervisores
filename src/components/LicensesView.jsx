@@ -10,32 +10,129 @@ const LICENSE_TYPES = {
     maternidad: { label: 'Maternidad', color: '#a855f7' },
     paternidad: { label: 'Paternidad', color: '#a855f7' },
     psiquiatrica: { label: 'Psiquiátrica', color: '#ef4444' },
-    sin_goce: { label: 'Sin goce', color: '#6b7280' }
+    sin_goce: { label: 'Sin goce', color: '#6b7280' },
 };
+
+function LicenseTypeBadge({ type }) {
+    const t = LICENSE_TYPES[type];
+    return (
+        <span
+            className="badge"
+            style={{ background: (t?.color || '#666') + '22', color: t?.color || '#666' }}
+        >
+            {t?.label || type}
+        </span>
+    );
+}
+
+function LicenseTable({ licenses, onEdit, onDelete, showStatus = false }) {
+    return (
+        <div className="card" style={{ padding: 0 }}>
+            <div className="table-container">
+                <table className="table">
+                    <thead>
+                        <tr>
+                            <th>Empleado</th>
+                            <th>Tipo</th>
+                            <th>Inicio</th>
+                            <th>Fin</th>
+                            <th>Días</th>
+                            {showStatus && <th>Estado</th>}
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {licenses.map(license => {
+                            const days = Math.ceil(
+                                (new Date(license.end_date) - new Date(license.start_date)) / (1000 * 60 * 60 * 24)
+                            ) + 1;
+                            return (
+                                <tr key={license.id}>
+                                    <td>
+                                        <strong>{license.apellido}, {license.nombre}</strong>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                            Legajo: {license.legajo}
+                                        </div>
+                                    </td>
+                                    <td><LicenseTypeBadge type={license.type} /></td>
+                                    <td>{license.start_date}</td>
+                                    <td>{license.end_date}</td>
+                                    <td>{days}</td>
+                                    {showStatus && (
+                                        <td>
+                                            <span className="badge badge-secondary">{license.status}</span>
+                                        </td>
+                                    )}
+                                    <td>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ padding: '0.4rem' }}
+                                                onClick={() => onEdit(license)}
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button
+                                                className="btn btn-secondary"
+                                                style={{ padding: '0.4rem', color: 'var(--error)' }}
+                                                onClick={() => onDelete(license.id)}
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {licenses.length === 0 && (
+                            <tr>
+                                <td colSpan={showStatus ? 7 : 6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                    No hay licencias registradas.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
 
 export default function LicensesView({ employees }) {
     const [licenses, setLicenses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editingLicense, setEditingLicense] = useState(null);
-    const [filterType, setFilterType] = useState('all');
     const [filterEmployee, setFilterEmployee] = useState('all');
-    const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+    const [viewMode, setViewMode] = useState('calendar');
+    const [mainTab, setMainTab] = useState('activas');
     const [alerts, setAlerts] = useState({ upcoming: [], ending: [] });
+    // Terminadas filters
+    const [finFilterType, setFinFilterType] = useState('all');
+    const [finFilterFrom, setFinFilterFrom] = useState('');
+    const [finFilterTo, setFinFilterTo] = useState('');
     const fileInputRef = useRef(null);
-    
+
     useEffect(() => {
         loadLicenses();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    
+
     const loadLicenses = async () => {
         try {
             const res = await fetch('/api/licenses');
             if (res.ok) {
                 const data = await res.json();
-                setLicenses(data);
-                calculateAlerts(data);
+                // Delete cancelled licenses from DB silently
+                const cancelled = data.filter(l => l.status === 'cancelada');
+                if (cancelled.length > 0) {
+                    await Promise.all(
+                        cancelled.map(l => fetch(`/api/licenses/${l.id}`, { method: 'DELETE' }))
+                    );
+                }
+                const visible = data.filter(l => l.status !== 'cancelada');
+                setLicenses(visible);
+                calculateAlerts(visible);
             }
         } catch (err) {
             console.error('Error loading licenses:', err);
@@ -43,71 +140,63 @@ export default function LicensesView({ employees }) {
             setLoading(false);
         }
     };
-    
+
     const calculateAlerts = (data) => {
         const today = new Date();
         const threeDays = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
-        
-        const upcoming = data.filter(l => {
-            const start = new Date(l.start_date);
-            return l.status === 'activa' && start >= today && start <= threeDays;
+        setAlerts({
+            upcoming: data.filter(l => {
+                const start = new Date(l.start_date);
+                return l.status === 'activa' && start >= today && start <= threeDays;
+            }),
+            ending: data.filter(l => {
+                const end = new Date(l.end_date);
+                return l.status === 'activa' && end >= today && end <= threeDays;
+            }),
         });
-        
-        const ending = data.filter(l => {
-            const end = new Date(l.end_date);
-            return l.status === 'activa' && end >= today && end <= threeDays;
-        });
-        
-        setAlerts({ upcoming, ending });
     };
-    
-    const filteredLicenses = useMemo(() => {
-        return licenses.filter(l => {
-            const matchesType = filterType === 'all' || l.type === filterType;
-            const matchesEmployee = filterEmployee === 'all' || l.employee_id?.toString() === filterEmployee;
-            return matchesType && matchesEmployee;
-        });
-    }, [licenses, filterType, filterEmployee]);
-    
+
+    const handleSave = (saved) => {
+        // If the saved license was set to cancelled, remove it
+        if (saved.status === 'cancelada') {
+            setLicenses(prev => prev.filter(l => l.id !== saved.id));
+            fetch(`/api/licenses/${saved.id}`, { method: 'DELETE' });
+        } else {
+            setLicenses(prev => {
+                const exists = prev.find(l => l.id === saved.id);
+                return exists
+                    ? prev.map(l => l.id === saved.id ? { ...l, ...saved } : l)
+                    : [...prev, saved];
+            });
+        }
+        loadLicenses();
+    };
+
     const handleDelete = async (id) => {
         if (!confirm('¿Estás seguro de eliminar esta licencia?')) return;
-        
         try {
             const res = await fetch(`/api/licenses/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                setLicenses(licenses.filter(l => l.id !== id));
-            }
+            if (res.ok) setLicenses(prev => prev.filter(l => l.id !== id));
         } catch (err) {
             console.error('Error deleting license:', err);
         }
     };
-    
+
     const handleImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        
         const formData = new FormData();
         formData.append('file', file);
-        
         try {
-            const res = await fetch('/api/licenses/import', {
-                method: 'POST',
-                body: formData
-            });
-            
+            const res = await fetch('/api/licenses/import', { method: 'POST', body: formData });
             const result = await res.json();
-            if (res.ok) {
-                alert(result.message);
-                loadLicenses();
-            } else {
-                alert(result.error || 'Error al importar');
-            }
-        } catch (err) {
-            console.error('Error importing:', err);
+            if (res.ok) { alert(result.message); loadLicenses(); }
+            else alert(result.error || 'Error al importar');
+        } catch {
             alert('Error al importar licencias');
         }
     };
-    
+
     const handleExport = async () => {
         try {
             const res = await fetch('/api/licenses/import');
@@ -119,31 +208,87 @@ export default function LicensesView({ employees }) {
                 a.download = `licencias_${new Date().toISOString().split('T')[0]}.xlsx`;
                 a.click();
             }
-        } catch (err) {
-            console.error('Error exporting:', err);
+        } catch {
             alert('Error al exportar');
         }
     };
-    
-    const activeLicenses = licenses.filter(l => l.status === 'activa');
-    
+
+    const openEdit = (license) => { setEditingLicense(license); setShowForm(true); };
+
+    const activeLicenses = useMemo(() =>
+        licenses.filter(l => l.status === 'activa' &&
+            (filterEmployee === 'all' || l.employee_id?.toString() === filterEmployee)),
+        [licenses, filterEmployee]);
+
+    const finishedLicenses = useMemo(() =>
+        licenses.filter(l => {
+            if (l.status !== 'finalizada') return false;
+            if (filterEmployee !== 'all' && l.employee_id?.toString() !== filterEmployee) return false;
+            if (finFilterType !== 'all' && l.type !== finFilterType) return false;
+            if (finFilterFrom && l.end_date < finFilterFrom) return false;
+            if (finFilterTo && l.start_date > finFilterTo) return false;
+            return true;
+        }),
+        [licenses, filterEmployee, finFilterType, finFilterFrom, finFilterTo]);
+
+    const activeCount = licenses.filter(l => l.status === 'activa').length;
+    const finishedCount = licenses.filter(l => l.status === 'finalizada').length;
+
+    const exportExcel = () => {
+        import('xlsx').then(XLSX => {
+            const rows = finishedLicenses.map(l => ({
+                Empleado: `${l.apellido}, ${l.nombre}`,
+                Legajo: l.legajo || '',
+                Tipo: LICENSE_TYPES[l.type]?.label || l.type,
+                'Fecha Inicio': l.start_date,
+                'Fecha Fin': l.end_date,
+                Días: Math.ceil((new Date(l.end_date) - new Date(l.start_date)) / 86400000) + 1,
+            }));
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Licencias Terminadas');
+            XLSX.writeFile(wb, `licencias_terminadas_${new Date().toISOString().split('T')[0]}.xlsx`);
+        });
+    };
+
+    const exportPDF = () => {
+        import('jspdf').then(({ jsPDF }) => {
+            import('jspdf-autotable').then(() => {
+                const doc = new jsPDF();
+                doc.setFontSize(14);
+                doc.text('Licencias Terminadas', 14, 16);
+                doc.setFontSize(9);
+                doc.setTextColor(120);
+                doc.text(`Generado: ${new Date().toLocaleDateString('es-AR')}`, 14, 22);
+                doc.autoTable({
+                    startY: 28,
+                    head: [['Empleado', 'Legajo', 'Tipo', 'Inicio', 'Fin', 'Días']],
+                    body: finishedLicenses.map(l => [
+                        `${l.apellido}, ${l.nombre}`,
+                        l.legajo || '',
+                        LICENSE_TYPES[l.type]?.label || l.type,
+                        l.start_date,
+                        l.end_date,
+                        Math.ceil((new Date(l.end_date) - new Date(l.start_date)) / 86400000) + 1,
+                    ]),
+                    styles: { fontSize: 9 },
+                    headStyles: { fillColor: [59, 130, 246] },
+                    alternateRowStyles: { fillColor: [245, 247, 250] },
+                });
+                doc.save(`licencias_terminadas_${new Date().toISOString().split('T')[0]}.pdf`);
+            });
+        });
+    };
+
     return (
         <div className="licenses-view">
-            <header className="page-header" style={{ marginBottom: '2rem' }}>
+            <header className="page-header" style={{ marginBottom: '1.5rem' }}>
                 <div>
                     <h1>Licencias</h1>
-                    <p style={{ color: 'var(--text-muted)' }}>
-                        {activeLicenses.length} licencias activas
-                    </p>
+                    <p style={{ color: 'var(--text-muted)' }}>{activeCount} activas</p>
                 </div>
                 <div className="page-header-actions">
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        hidden
-                        onChange={handleImport}
-                        accept=".xlsx,.xls"
-                    />
+                    <input type="file" ref={fileInputRef} hidden onChange={handleImport} accept=".xlsx,.xls" />
                     <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>
                         📥 Importar Excel
                     </button>
@@ -155,34 +300,61 @@ export default function LicensesView({ employees }) {
                     </button>
                 </div>
             </header>
-            
+
             {/* Alertas */}
             {(alerts.upcoming.length > 0 || alerts.ending.length > 0) && (
                 <div className="licenses-alerts" style={{ marginBottom: '1.5rem' }}>
                     {alerts.upcoming.length > 0 && (
                         <div className="alert alert-info">
-                            <strong>⚠️ Próximas licencias:</strong> {' '}
+                            <strong>⚠️ Próximas licencias:</strong>{' '}
                             {alerts.upcoming.map(l => `${l.apellido}, ${l.nombre} (${l.start_date})`).join('; ')}
                         </div>
                     )}
                     {alerts.ending.length > 0 && (
                         <div className="alert alert-warning">
-                            <strong>🔔 Licencias por finalizar:</strong> {' '}
+                            <strong>🔔 Licencias por finalizar:</strong>{' '}
                             {alerts.ending.map(l => `${l.apellido}, ${l.nombre} (${l.end_date})`).join('; ')}
                         </div>
                     )}
                 </div>
             )}
-            
+
+            {/* Tabs principales */}
+            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.25rem', borderBottom: '2px solid var(--border-color)' }}>
+                <button
+                    className="btn"
+                    onClick={() => setMainTab('activas')}
+                    style={{
+                        borderRadius: '6px 6px 0 0',
+                        borderBottom: mainTab === 'activas' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                        marginBottom: '-2px',
+                        color: mainTab === 'activas' ? 'var(--color-primary)' : 'var(--text-muted)',
+                        fontWeight: mainTab === 'activas' ? 700 : 400,
+                        background: 'none',
+                        padding: '0.5rem 1.1rem',
+                    }}
+                >
+                    Activas {activeCount > 0 && <span style={{ fontSize: '0.75rem', marginLeft: '0.3rem', background: 'var(--color-primary)', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>{activeCount}</span>}
+                </button>
+                <button
+                    className="btn"
+                    onClick={() => setMainTab('terminadas')}
+                    style={{
+                        borderRadius: '6px 6px 0 0',
+                        borderBottom: mainTab === 'terminadas' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                        marginBottom: '-2px',
+                        color: mainTab === 'terminadas' ? 'var(--color-primary)' : 'var(--text-muted)',
+                        fontWeight: mainTab === 'terminadas' ? 700 : 400,
+                        background: 'none',
+                        padding: '0.5rem 1.1rem',
+                    }}
+                >
+                    Terminadas {finishedCount > 0 && <span style={{ fontSize: '0.75rem', marginLeft: '0.3rem', background: 'var(--text-muted)', color: '#fff', borderRadius: 10, padding: '1px 6px' }}>{finishedCount}</span>}
+                </button>
+            </div>
+
             {/* Filtros */}
             <div className="card hr-filters-bar" style={{ marginBottom: '1.5rem' }}>
-                <select value={filterType} onChange={e => setFilterType(e.target.value)}>
-                    <option value="all">Todos los tipos</option>
-                    {Object.entries(LICENSE_TYPES).map(([key, type]) => (
-                        <option key={key} value={key}>{type.label}</option>
-                    ))}
-                </select>
-                
                 <select value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)}>
                     <option value="all">Todos los empleados</option>
                     {employees.map(emp => (
@@ -191,130 +363,93 @@ export default function LicensesView({ employees }) {
                         </option>
                     ))}
                 </select>
-                
-                <div className="view-toggle">
-                    <button
-                        className={`btn ${viewMode === 'calendar' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setViewMode('calendar')}
-                    >
-                        📅 Calendario
-                    </button>
-                    <button
-                        className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setViewMode('list')}
-                    >
-                        📋 Lista
-                    </button>
-                </div>
-            </div>
-            
-            {/* Vista Calendario */}
-            {viewMode === 'calendar' && (
-                <LicensesCalendar
-                    licenses={filteredLicenses}
-                    onLicenseClick={(license) => {
-                        setEditingLicense(license);
-                        setShowForm(true);
-                    }}
-                />
-            )}
-            
-            {/* Vista Lista */}
-            {viewMode === 'list' && (
-                <div className="card" style={{ padding: 0 }}>
-                    <div className="table-container">
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Empleado</th>
-                                    <th>Tipo</th>
-                                    <th>Inicio</th>
-                                    <th>Fin</th>
-                                    <th>Días</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredLicenses.map(license => {
-                                    const days = Math.ceil((new Date(license.end_date) - new Date(license.start_date)) / (1000 * 60 * 60 * 24)) + 1;
-                                    return (
-                                        <tr key={license.id}>
-                                            <td>
-                                                <strong>{license.apellido}, {license.nombre}</strong>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                    Legajo: {license.legajo}
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span
-                                                    className="badge"
-                                                    style={{
-                                                        background: LICENSE_TYPES[license.type]?.color + '20',
-                                                        color: LICENSE_TYPES[license.type]?.color
-                                                    }}
-                                                >
-                                                    {LICENSE_TYPES[license.type]?.label || license.type}
-                                                </span>
-                                            </td>
-                                            <td>{license.start_date}</td>
-                                            <td>{license.end_date}</td>
-                                            <td>{days}</td>
-                                            <td>
-                                                <span className={`badge badge-${license.status === 'activa' ? 'success' : license.status === 'finalizada' ? 'secondary' : 'danger'}`}>
-                                                    {license.status}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    <button
-                                                        className="btn btn-secondary"
-                                                        style={{ padding: '0.4rem' }}
-                                                        onClick={() => {
-                                                            setEditingLicense(license);
-                                                            setShowForm(true);
-                                                        }}
-                                                    >
-                                                        ✏️
-                                                    </button>
-                                                    <button
-                                                        className="btn btn-secondary"
-                                                        style={{ padding: '0.4rem', color: 'var(--error)' }}
-                                                        onClick={() => handleDelete(license.id)}
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                                {filteredLicenses.length === 0 && (
-                                    <tr>
-                                        <td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>
-                                            No hay licencias registradas.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
+
+                {mainTab === 'activas' && (
+                    <div className="view-toggle">
+                        <button
+                            className={`btn ${viewMode === 'calendar' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setViewMode('calendar')}
+                        >
+                            📅 Calendario
+                        </button>
+                        <button
+                            className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setViewMode('list')}
+                        >
+                            📋 Lista
+                        </button>
                     </div>
-                </div>
+                )}
+            </div>
+
+            {/* Tab: Activas */}
+            {mainTab === 'activas' && (
+                <>
+                    {viewMode === 'calendar' && (
+                        <LicensesCalendar
+                            licenses={activeLicenses}
+                            onLicenseClick={openEdit}
+                        />
+                    )}
+                    {viewMode === 'list' && (
+                        <LicenseTable
+                            licenses={activeLicenses}
+                            onEdit={openEdit}
+                            onDelete={handleDelete}
+                            showStatus={false}
+                        />
+                    )}
+                </>
             )}
-            
-            {/* Modal Form */}
+
+            {/* Tab: Terminadas */}
+            {mainTab === 'terminadas' && (
+                <>
+                    {/* Filtros terminadas */}
+                    <div className="card hr-filters-bar" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                        <select value={finFilterType} onChange={e => setFinFilterType(e.target.value)}>
+                            <option value="all">Todos los tipos</option>
+                            {Object.entries(LICENSE_TYPES).map(([key, t]) => (
+                                <option key={key} value={key}>{t.label}</option>
+                            ))}
+                        </select>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Desde</label>
+                            <input type="date" value={finFilterFrom} onChange={e => setFinFilterFrom(e.target.value)} style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Hasta</label>
+                            <input type="date" value={finFilterTo} onChange={e => setFinFilterTo(e.target.value)} style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }} />
+                        </div>
+                        {(finFilterType !== 'all' || finFilterFrom || finFilterTo) && (
+                            <button className="btn btn-secondary" style={{ fontSize: '0.82rem', padding: '0.35rem 0.75rem' }}
+                                onClick={() => { setFinFilterType('all'); setFinFilterFrom(''); setFinFilterTo(''); }}>
+                                Limpiar
+                            </button>
+                        )}
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                            <button className="btn btn-secondary" onClick={exportExcel} disabled={finishedLicenses.length === 0}>
+                                📥 Excel
+                            </button>
+                            <button className="btn btn-secondary" onClick={exportPDF} disabled={finishedLicenses.length === 0}>
+                                📄 PDF
+                            </button>
+                        </div>
+                    </div>
+                    <LicenseTable
+                        licenses={finishedLicenses}
+                        onEdit={openEdit}
+                        onDelete={handleDelete}
+                        showStatus={false}
+                    />
+                </>
+            )}
+
             {showForm && (
                 <LicenseForm
                     license={editingLicense}
                     employees={employees}
-                    onSave={(saved) => {
-                        if (editingLicense) {
-                            setLicenses(licenses.map(l => l.id === saved.id ? saved : l));
-                        } else {
-                            setLicenses([...licenses, saved]);
-                        }
-                        loadLicenses();
-                    }}
+                    onSave={handleSave}
                     onClose={() => { setShowForm(false); setEditingLicense(null); }}
                 />
             )}

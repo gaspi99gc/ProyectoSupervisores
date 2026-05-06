@@ -35,8 +35,7 @@ export async function PUT(req, { params }) {
                 start_date,
                 end_date,
                 notes: notes || null,
-                status: status || 'activa',
-                updated_at: new Date().toISOString()
+                status: status || 'activa'
             })
             .eq('id', id)
             .select()

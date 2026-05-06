@@ -1,4 +1,23 @@
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/db';
+
+async function fetchRoutesWithService(supervisorId) {
+    const { data, error } = await supabase
+        .from('supervisor_routes')
+        .select('*, services:service_id(name, address, lat, lng)')
+        .eq('supervisor_id', supervisorId)
+        .order('route_order', { ascending: true });
+
+    if (error) throw error;
+
+    return (data || []).map(row => ({
+        ...row,
+        service_name: row.services?.name || null,
+        service_address: row.services?.address || null,
+        lat: row.services?.lat || null,
+        lng: row.services?.lng || null,
+        services: undefined,
+    }));
+}
 
 export async function GET(req) {
     try {
@@ -9,15 +28,7 @@ export async function GET(req) {
             return Response.json({ error: 'supervisor_id is required' }, { status: 400 });
         }
 
-        const { rows } = await db.execute({
-            sql: `SELECT sr.*, s.name as service_name, s.address as service_address, s.lat, s.lng
-                  FROM supervisor_routes sr
-                  JOIN services s ON sr.service_id = s.id
-                  WHERE sr.supervisor_id = ?
-                  ORDER BY sr.route_order ASC`,
-            args: [supervisorId]
-        });
-
+        const rows = await fetchRoutesWithService(supervisorId);
         return Response.json(rows);
     } catch (error) {
         console.error('Error fetching supervisor routes:', error);
@@ -28,36 +39,24 @@ export async function GET(req) {
 export async function POST(req) {
     try {
         const { supervisor_id, services } = await req.json();
-        // services = [{ service_id, route_order }, ...]
 
         if (!supervisor_id || !services || !Array.isArray(services)) {
             return Response.json({ error: 'supervisor_id and services array required' }, { status: 400 });
         }
 
-        // Delete existing routes for this supervisor
-        await db.execute({
-            sql: 'DELETE FROM supervisor_routes WHERE supervisor_id = ?',
-            args: [supervisor_id]
-        });
+        await supabase.from('supervisor_routes').delete().eq('supervisor_id', supervisor_id);
 
-        // Insert new routes
-        for (const svc of services) {
-            await db.execute({
-                sql: 'INSERT INTO supervisor_routes (supervisor_id, service_id, route_order) VALUES (?, ?, ?)',
-                args: [supervisor_id, svc.service_id, svc.route_order]
-            });
+        if (services.length > 0) {
+            await supabase.from('supervisor_routes').insert(
+                services.map(svc => ({
+                    supervisor_id,
+                    service_id: svc.service_id,
+                    route_order: svc.route_order,
+                }))
+            );
         }
 
-        // Return the new routes
-        const { rows } = await db.execute({
-            sql: `SELECT sr.*, s.name as service_name, s.address as service_address, s.lat, s.lng
-                  FROM supervisor_routes sr
-                  JOIN services s ON sr.service_id = s.id
-                  WHERE sr.supervisor_id = ?
-                  ORDER BY sr.route_order ASC`,
-            args: [supervisor_id]
-        });
-
+        const rows = await fetchRoutesWithService(supervisor_id);
         return Response.json(rows, { status: 201 });
     } catch (error) {
         console.error('Error saving supervisor routes:', error);

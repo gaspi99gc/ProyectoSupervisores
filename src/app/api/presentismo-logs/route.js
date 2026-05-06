@@ -1,49 +1,43 @@
-import { db } from '@/lib/db';
-import { ensureSupervisorStatusTable } from '@/lib/supervisor-status';
+import { supabase } from '@/lib/db';
 
 export async function GET(req) {
     try {
-        await ensureSupervisorStatusTable();
-
         const { searchParams } = new URL(req.url);
         const supervisorId = searchParams.get('supervisor_id');
         const serviceId = searchParams.get('service_id');
         const days = Number(searchParams.get('days'));
 
-        let query = `
-            SELECT pl.id, pl.event_type, pl.occurred_at, pl.event_lat, pl.event_lng,
-                   s.id AS service_id, s.name AS service_name, s.address AS service_address,
-                   sup.id AS supervisor_id, sup.name AS supervisor_name, sup.surname AS supervisor_surname, sup.dni AS supervisor_dni
-            FROM supervisor_presentismo_logs pl
-            JOIN services s ON s.id = pl.service_id
-            JOIN supervisors sup ON sup.id = pl.supervisor_id
-        `;
+        let query = supabase
+            .from('supervisor_presentismo_logs')
+            .select('id, event_type, occurred_at, event_lat, event_lng, services:service_id(id, name, address), supervisors:supervisor_id(id, app_users(name, surname, username))')
+            .order('occurred_at', { ascending: false });
 
-        const conditions = [];
-        const args = [];
-
-        if (supervisorId) {
-            conditions.push('pl.supervisor_id = ?');
-            args.push(supervisorId);
-        }
-
-        if (serviceId) {
-            conditions.push('pl.service_id = ?');
-            args.push(serviceId);
-        }
+        if (supervisorId) query = query.eq('supervisor_id', supervisorId);
+        if (serviceId) query = query.eq('service_id', serviceId);
 
         if (Number.isFinite(days) && days > 0) {
-            conditions.push(`datetime(pl.occurred_at, '-3 hours') >= datetime('now', '-3 hours', ?)`);
-            args.push(`-${days} days`);
+            const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+            query = query.gte('occurred_at', cutoff.toISOString());
         }
 
-        if (conditions.length > 0) {
-            query += ` WHERE ${conditions.join(' AND ')}`;
-        }
+        const { data, error } = await query;
+        if (error) throw error;
 
-        query += ' ORDER BY pl.occurred_at DESC';
+        const rows = (data || []).map(pl => ({
+            id: pl.id,
+            event_type: pl.event_type,
+            occurred_at: pl.occurred_at,
+            event_lat: pl.event_lat,
+            event_lng: pl.event_lng,
+            service_id: pl.services?.id || null,
+            service_name: pl.services?.name || null,
+            service_address: pl.services?.address || null,
+            supervisor_id: pl.supervisors?.id || null,
+            supervisor_name: pl.supervisors?.app_users?.name || null,
+            supervisor_surname: pl.supervisors?.app_users?.surname || null,
+            supervisor_dni: pl.supervisors?.app_users?.username || null,
+        }));
 
-        const { rows } = await db.execute({ sql: query, args });
         return Response.json(rows);
     } catch (error) {
         console.error('Error fetching presentismo logs:', error);

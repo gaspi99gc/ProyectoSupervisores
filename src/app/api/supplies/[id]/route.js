@@ -1,36 +1,40 @@
-import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/db';
 
-export async function PUT(request, { params }) {
+export async function PUT(req, { params }) {
     try {
         const { id } = await params;
-        const { nombre, unidad, activo } = await request.json();
+        const { nombre, unidad, activo } = await req.json();
 
-        await db.execute({
-            sql: 'UPDATE supplies SET nombre = ?, unidad = ?, activo = ? WHERE id = ?',
-            args: [nombre, unidad || 'unidades', activo !== undefined ? activo : 1, id]
-        });
+        if (!nombre?.trim()) {
+            return Response.json({ error: 'El nombre es obligatorio' }, { status: 400 });
+        }
 
-        return NextResponse.json({ success: true });
+        const { error } = await supabase
+            .from('supplies')
+            .update({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false })
+            .eq('id', id);
+
+        if (error) throw error;
+        return Response.json({ success: true });
     } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('Error updating supply:', error);
+        return Response.json({ error: 'Failed to update supply' }, { status: 500 });
     }
 }
 
-export async function DELETE(request, { params }) {
+export async function DELETE(req, { params }) {
     try {
         const { id } = await params;
 
-        // Optionally, check if the supply is used in supply_request_items before deleting
-        // Or simply set activo = 0 instead of hard delete
+        const { error } = await supabase
+            .from('supplies')
+            .delete()
+            .eq('id', id);
 
-        await db.execute({
-            sql: 'DELETE FROM supplies WHERE id = ?',
-            args: [id]
-        });
-
-        return NextResponse.json({ success: true });
+        if (error) throw error;
+        return Response.json({ success: true });
     } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('Error deleting supply:', error);
+        return Response.json({ error: 'Failed to delete supply' }, { status: 500 });
     }
 }

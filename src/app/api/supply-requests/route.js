@@ -1,5 +1,4 @@
-import { db } from '@/lib/db';
-import { ensureSupplyRequestSchema } from '@/lib/supply-requests';
+import { supabase } from '@/lib/db';
 
 const ACTIVE_REQUEST_STATUSES = ['pendiente', 'revisado'];
 const ALLOWED_REQUEST_STATUSES = ['pendiente', 'revisado', 'cerrado'];
@@ -11,25 +10,15 @@ function normalizeStatusFilter(status) {
     return status;
 }
 
-function appendStatusCondition(conditions, args, status) {
-    const normalizedStatus = normalizeStatusFilter(status);
-
-    if (!normalizedStatus || normalizedStatus === 'todos') {
-        return;
-    }
-
-    if (normalizedStatus === 'activos') {
-        conditions.push(`sr.status IN (${ACTIVE_REQUEST_STATUSES.map(() => '?').join(', ')})`);
-        args.push(...ACTIVE_REQUEST_STATUSES);
-        return;
-    }
-
-    conditions.push('sr.status = ?');
-    args.push(normalizedStatus);
+// Argentina is UTC-3. Convert an Argentina YYYY-MM-DD to UTC range [start, end).
+function argentinaDateToUTCRange(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d, 3, 0, 0)); // midnight AR = 03:00 UTC
+    const end = new Date(Date.UTC(y, m - 1, d + 1, 3, 0, 0));
+    return { start: start.toISOString(), end: end.toISOString() };
 }
 
-function buildRequestConditions(searchParams, options = {}) {
-    const { statusOnly = false } = options;
+function buildSupabaseQuery(searchParams) {
     const requestId = searchParams.get('request_id');
     const supervisorId = searchParams.get('supervisor_id');
     const serviceId = searchParams.get('service_id');
@@ -40,106 +29,94 @@ function buildRequestConditions(searchParams, options = {}) {
     const providerId = searchParams.get('provider_id');
     const urgency = searchParams.get('urgency');
 
-    const conditions = [];
-    const args = [];
+    let query = supabase
+        .from('supply_requests')
+        .select('*, services:service_id(name, address), supervisors:supervisor_id(name, surname, dni), providers:provider_id(name)')
+        .order('created_at', { ascending: false });
 
-    appendStatusCondition(conditions, args, status);
-
-    if (statusOnly) {
-        return { conditions, args };
+    const normalizedStatus = normalizeStatusFilter(status);
+    if (normalizedStatus === 'activos') {
+        query = query.in('status', ACTIVE_REQUEST_STATUSES);
+    } else if (normalizedStatus && normalizedStatus !== 'todos') {
+        query = query.eq('status', normalizedStatus);
     }
 
-    if (requestId) {
-        conditions.push('sr.id = ?');
-        args.push(requestId);
-    }
-    if (supervisorId) {
-        conditions.push('sr.supervisor_id = ?');
-        args.push(supervisorId);
-    }
-    if (serviceId) {
-        conditions.push('sr.service_id = ?');
-        args.push(serviceId);
-    }
+    if (requestId) query = query.eq('id', requestId);
+    if (supervisorId) query = query.eq('supervisor_id', supervisorId);
+    if (serviceId) query = query.eq('service_id', serviceId);
+    if (providerId) query = query.eq('provider_id', providerId);
+    if (urgency === 'solo_urgentes') query = query.eq('urgent', true);
+
     if (date) {
-        conditions.push(`date(datetime(sr.created_at, '-3 hours')) = ?`);
-        args.push(date);
+        const { start, end } = argentinaDateToUTCRange(date);
+        query = query.gte('created_at', start).lt('created_at', end);
     }
     if (startDate) {
-        conditions.push(`date(datetime(sr.created_at, '-3 hours')) >= ?`);
-        args.push(startDate);
+        const { start } = argentinaDateToUTCRange(startDate);
+        query = query.gte('created_at', start);
     }
     if (endDate) {
-        conditions.push(`date(datetime(sr.created_at, '-3 hours')) <= ?`);
-        args.push(endDate);
-    }
-    if (providerId) {
-        conditions.push('sr.provider_id = ?');
-        args.push(providerId);
-    }
-    if (urgency === 'solo_urgentes') {
-        conditions.push('COALESCE(sr.urgent, 0) = 1');
+        const { end } = argentinaDateToUTCRange(endDate);
+        query = query.lt('created_at', end);
     }
 
-    return { conditions, args };
-}
-
-function buildWhereClause(conditions) {
-    return conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+    return query;
 }
 
 export async function GET(req) {
     try {
-        await ensureSupplyRequestSchema();
-
         const { searchParams } = new URL(req.url);
         const includeMeta = searchParams.get('include_meta') === 'true';
-        const { conditions, args } = buildRequestConditions(searchParams);
-        const whereClause = buildWhereClause(conditions);
 
-        const query = `
-            SELECT sr.*, COALESCE(sr.urgent, 0) as urgent,
-                   s.name as service_name, s.address as service_address,
-                   sup.name as supervisor_name, sup.surname as supervisor_surname, sup.dni as supervisor_dni,
-                   p.name as provider_name
-            FROM supply_requests sr
-            JOIN services s ON sr.service_id = s.id
-            JOIN supervisors sup ON sr.supervisor_id = sup.id
-            LEFT JOIN providers p ON sr.provider_id = p.id
-            ${whereClause}
-            ORDER BY sr.created_at DESC
-        `;
+        const { data: requestsRaw, error, count } = await buildSupabaseQuery(searchParams);
+        if (error) throw error;
 
-        const { rows: requests } = await db.execute({ sql: query, args });
+        const requests = await Promise.all((requestsRaw || []).map(async (row) => {
+            const { data: itemsRaw } = await supabase
+                .from('supply_request_items')
+                .select('cantidad, supplies:supply_id(nombre, unidad)')
+                .eq('request_id', row.id);
 
-        for (const requestRow of requests) {
-            const { rows: items } = await db.execute({
-                sql: `SELECT sri.cantidad, s.nombre, s.unidad
-                      FROM supply_request_items sri
-                      JOIN supplies s ON sri.supply_id = s.id
-                      WHERE sri.request_id = ?`,
-                args: [requestRow.id]
-            });
-            requestRow.items = items;
-            requestRow.status = normalizeStatusFilter(requestRow.status) || 'pendiente';
-            requestRow.urgent = Boolean(requestRow.urgent);
-        }
+            const items = (itemsRaw || []).map(i => ({
+                cantidad: i.cantidad,
+                nombre: i.supplies?.nombre || null,
+                unidad: i.supplies?.unidad || null,
+            }));
+
+            return {
+                ...row,
+                service_name: row.services?.name || null,
+                service_address: row.services?.address || null,
+                supervisor_name: row.supervisors?.name || null,
+                supervisor_surname: row.supervisors?.surname || null,
+                supervisor_dni: row.supervisors?.dni || null,
+                provider_name: row.providers?.name || null,
+                services: undefined,
+                supervisors: undefined,
+                providers: undefined,
+                urgent: Boolean(row.urgent),
+                status: normalizeStatusFilter(row.status) || 'pendiente',
+                items,
+            };
+        }));
 
         if (!includeMeta) {
             return Response.json(requests);
         }
 
-        const totalScope = buildRequestConditions(searchParams, { statusOnly: true });
-        const totalScopeWhere = buildWhereClause(totalScope.conditions);
-        const { rows: totalRows } = await db.execute({
-            sql: `SELECT COUNT(*) as count FROM supply_requests sr ${totalScopeWhere}`,
-            args: totalScope.args
-        });
+        // Count with status-only filter
+        const statusParam = searchParams.get('status');
+        const normalizedStatus = normalizeStatusFilter(statusParam);
+        let countQuery = supabase.from('supply_requests').select('id', { count: 'exact', head: true });
+        if (normalizedStatus === 'activos') {
+            countQuery = countQuery.in('status', ACTIVE_REQUEST_STATUSES);
+        } else if (normalizedStatus && normalizedStatus !== 'todos') {
+            countQuery = countQuery.eq('status', normalizedStatus);
+        }
 
-        return Response.json({
-            requests,
-            totalCount: Number(totalRows?.[0]?.count || 0),
-        });
+        const { count: totalCount } = await countQuery;
+
+        return Response.json({ requests, totalCount: totalCount || 0 });
     } catch (error) {
         console.error('Error fetching supply requests:', error);
         return Response.json({ error: 'Failed to fetch requests' }, { status: 500 });
@@ -148,8 +125,6 @@ export async function GET(req) {
 
 export async function POST(req) {
     try {
-        await ensureSupplyRequestSchema();
-
         const { supervisor_id, service_id, notas, items, urgent } = await req.json();
 
         if (!supervisor_id || !service_id) {
@@ -164,19 +139,29 @@ export async function POST(req) {
             return Response.json({ error: 'El pedido debe incluir al menos un insumo con cantidad.' }, { status: 400 });
         }
 
-        const requestResult = await db.execute({
-            sql: 'INSERT INTO supply_requests (supervisor_id, service_id, notas, status, urgent) VALUES (?, ?, ?, ?, ?) RETURNING id',
-            args: [supervisor_id, service_id, notas || '', 'pendiente', urgent ? 1 : 0]
-        });
+        const { data, error } = await supabase
+            .from('supply_requests')
+            .insert({
+                supervisor_id,
+                service_id,
+                notas: notas || '',
+                status: 'pendiente',
+                urgent: Boolean(urgent),
+            })
+            .select('id')
+            .single();
 
-        const requestId = requestResult.rows[0].id;
+        if (error) throw error;
 
-        for (const item of preparedItems) {
-            await db.execute({
-                sql: 'INSERT INTO supply_request_items (request_id, supply_id, cantidad) VALUES (?, ?, ?)',
-                args: [requestId, item.supply_id, item.cantidad]
-            });
-        }
+        const requestId = data.id;
+
+        await supabase.from('supply_request_items').insert(
+            preparedItems.map(item => ({
+                request_id: requestId,
+                supply_id: item.supply_id,
+                cantidad: item.cantidad,
+            }))
+        );
 
         return Response.json({ success: true, request_id: requestId }, { status: 201 });
     } catch (error) {
@@ -187,8 +172,6 @@ export async function POST(req) {
 
 export async function PATCH(req) {
     try {
-        await ensureSupplyRequestSchema();
-
         const { request_id, status, completed_by, provider_id } = await req.json();
 
         if (!request_id) {
@@ -206,29 +189,34 @@ export async function PATCH(req) {
             return Response.json({ error: 'Proveedor inválido.' }, { status: 400 });
         }
 
-        await db.execute({
-            sql: `UPDATE supply_requests
-                  SET status = ?,
-                      provider_id = ?,
-                      completed_by = CASE WHEN ? = 'cerrado' THEN ? ELSE NULL END,
-                      completed_at = CASE WHEN ? = 'cerrado' THEN CURRENT_TIMESTAMP ELSE NULL END
-                  WHERE id = ?`,
-            args: [normalizedStatus, normalizedProviderId, normalizedStatus, completed_by || null, normalizedStatus, request_id]
-        });
+        const updateData = {
+            status: normalizedStatus,
+            provider_id: normalizedProviderId,
+            completed_by: normalizedStatus === 'cerrado' ? completed_by || null : null,
+            completed_at: normalizedStatus === 'cerrado' ? new Date().toISOString() : null,
+        };
 
-        const { rows } = await db.execute({
-            sql: `SELECT sr.id, sr.status, sr.provider_id, sr.completed_by, sr.completed_at,
-                         p.name as provider_name
-                  FROM supply_requests sr
-                  LEFT JOIN providers p ON sr.provider_id = p.id
-                  WHERE sr.id = ?`,
-            args: [request_id]
-        });
+        const { error: updateError } = await supabase
+            .from('supply_requests')
+            .update(updateData)
+            .eq('id', request_id);
 
-        const row = rows[0] || null;
-        if (row) {
-            row.status = normalizeStatusFilter(row.status) || 'pendiente';
-        }
+        if (updateError) throw updateError;
+
+        const { data, error } = await supabase
+            .from('supply_requests')
+            .select('id, status, provider_id, completed_by, completed_at, providers:provider_id(name)')
+            .eq('id', request_id)
+            .single();
+
+        if (error) throw error;
+
+        const row = {
+            ...data,
+            provider_name: data.providers?.name || null,
+            providers: undefined,
+            status: normalizeStatusFilter(data.status) || 'pendiente',
+        };
 
         return Response.json(row);
     } catch (error) {

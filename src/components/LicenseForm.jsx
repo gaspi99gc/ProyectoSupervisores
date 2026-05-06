@@ -146,7 +146,6 @@ export default function LicenseForm({ license, employees, onSave, onClose }) {
                             >
                                 <option value="activa">Activa</option>
                                 <option value="finalizada">Finalizada</option>
-                                <option value="cancelada">Cancelada</option>
                             </select>
                         </div>
                     )}

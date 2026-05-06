@@ -1,14 +1,21 @@
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/db';
 
 export async function GET() {
     try {
-        const { rows } = await db.execute(`
-      SELECT e.*, s.name as service_name, sup.name as supervisor_name, sup.surname as supervisor_surname
-      FROM employees e
-      LEFT JOIN services s ON e.servicio_id = s.id
-      LEFT JOIN supervisors sup ON e.supervisor_id = sup.id
-      ORDER BY e.apellido ASC, e.nombre ASC
-    `);
+        const { data, error } = await supabase
+            .from('employees')
+            .select('*, services:servicio_id(name)')
+            .order('apellido', { ascending: true })
+            .order('nombre', { ascending: true });
+
+        if (error) throw error;
+
+        const rows = (data || []).map(emp => ({
+            ...emp,
+            service_name: emp.services?.name || null,
+            services: undefined,
+        }));
+
         return Response.json(rows);
     } catch (error) {
         console.error('Error fetching employees:', error);
@@ -20,26 +27,38 @@ export async function POST(req) {
     try {
         const data = await req.json();
 
-        // Check if Legajo exists
         if (data.legajo) {
-            const existing = await db.execute({
-                sql: 'SELECT id FROM employees WHERE legajo = ?',
-                args: [data.legajo]
-            });
-            if (existing.rows.length > 0) {
+            const { data: existing } = await supabase
+                .from('employees')
+                .select('id')
+                .eq('legajo', data.legajo)
+                .maybeSingle();
+
+            if (existing) {
                 return Response.json({ error: 'Ya existe un empleado con este Legajo' }, { status: 400 });
             }
         }
 
-        const { nombre, apellido, dni, cuil, fecha_ingreso, servicio_id, supervisor_id, legajo } = data;
+        const { nombre, apellido, dni, cuil, fecha_ingreso, servicio_id, legajo } = data;
 
-        const result = await db.execute({
-            sql: `INSERT INTO employees (legajo, nombre, apellido, dni, cuil, fecha_ingreso, servicio_id, supervisor_id, estado_empleado) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Activo') RETURNING id`,
-            args: [legajo || null, nombre, apellido, dni || null, cuil || null, fecha_ingreso || null, servicio_id || null, supervisor_id || null]
-        });
+        const { data: result, error } = await supabase
+            .from('employees')
+            .insert({
+                legajo: legajo || null,
+                nombre,
+                apellido,
+                dni: dni || null,
+                cuil: cuil || null,
+                fecha_ingreso: fecha_ingreso || null,
+                servicio_id: servicio_id || null,
+                estado_empleado: 'Activo',
+            })
+            .select('id')
+            .single();
 
-        return Response.json({ id: result.rows[0].id, ...data, estado_empleado: 'Activo' }, { status: 201 });
+        if (error) throw error;
+
+        return Response.json({ id: result.id, ...data, estado_empleado: 'Activo' }, { status: 201 });
     } catch (error) {
         console.error('Error creating employee:', error);
         return Response.json({ error: 'Failed to create employee' }, { status: 500 });

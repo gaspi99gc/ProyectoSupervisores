@@ -1,34 +1,27 @@
-import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/passwords';
-import { ensureSupervisorAuthColumns } from '@/lib/supervisor-auth';
+import { supabase } from '@/lib/db';
 import { ensureSupervisorStatusRow } from '@/lib/supervisor-status';
 
-function sanitizeSupervisorRow(supervisor) {
+function sanitize(row) {
+    const user = row.app_users;
     return {
-        id: supervisor.id,
-        name: supervisor.name,
-        surname: supervisor.surname,
-        dni: supervisor.dni,
-        login_enabled: Boolean(supervisor.login_enabled),
-        has_password: Boolean(supervisor.has_password),
-        password_updated_at: supervisor.password_updated_at || null,
+        id: row.id,
+        name: user?.name || null,
+        surname: user?.surname || null,
+        dni: user?.username || null,
+        login_enabled: user?.login_enabled !== false,
     };
 }
 
 export async function GET() {
     try {
-        await ensureSupervisorAuthColumns();
+        const { data, error } = await supabase
+            .from('supervisors')
+            .select('id, app_users(name, surname, username, login_enabled)')
+            .order('app_users(surname)', { ascending: true });
 
-        const { rows } = await db.execute(`
-            SELECT id, name, surname, dni,
-                   COALESCE(login_enabled, 1) AS login_enabled,
-                   CASE WHEN password_hash IS NOT NULL AND password_hash <> '' THEN 1 ELSE 0 END AS has_password,
-                   password_updated_at
-            FROM supervisors
-            ORDER BY surname ASC, name ASC
-        `);
+        if (error) throw error;
 
-        return Response.json(rows.map(sanitizeSupervisorRow));
+        return Response.json((data || []).map(sanitize));
     } catch (error) {
         console.error('Error fetching supervisors:', error);
         return Response.json({ error: 'Failed to fetch supervisors' }, { status: 500 });
@@ -37,54 +30,73 @@ export async function GET() {
 
 export async function POST(req) {
     try {
-        await ensureSupervisorAuthColumns();
-
         const { name, surname, dni, password, login_enabled } = await req.json();
         const normalizedName = name?.trim();
         const normalizedSurname = surname?.trim();
-        const normalizedDni = dni?.toString().trim();
+        const normalizedDni = dni?.toString().trim().toLowerCase();
         const normalizedPassword = password?.toString() || '';
 
         if (!normalizedName || !normalizedSurname || !normalizedDni) {
             return Response.json({ error: 'Nombre, apellido y DNI son obligatorios' }, { status: 400 });
         }
-
         if (normalizedPassword.length < 6) {
             return Response.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 });
         }
 
-        // Check if DNI already exists
-        const existing = await db.execute({
-            sql: 'SELECT id FROM supervisors WHERE dni = ?',
-            args: [normalizedDni]
+        const email = `${normalizedDni}@lasia.com.ar`;
+
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email,
+            password: normalizedPassword,
+            email_confirm: true,
         });
 
-        if (existing.rows.length > 0) {
-            return Response.json({ error: 'Ya existe un supervisor con este DNI' }, { status: 400 });
+        if (authError) {
+            const msg = authError.message?.toLowerCase() || '';
+            if (msg.includes('already') || authError.code === 'email_exists') {
+                return Response.json({ error: 'Ya existe un supervisor con ese DNI' }, { status: 400 });
+            }
+            throw authError;
         }
 
-        const passwordHash = hashPassword(normalizedPassword);
-        const loginEnabledValue = login_enabled === false ? 0 : 1;
+        const authId = authData.user.id;
 
-        const result = await db.execute({
-            sql: `INSERT INTO supervisors (name, surname, dni, password_hash, login_enabled, password_updated_at)
-                  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                  RETURNING id`,
-            args: [normalizedName, normalizedSurname, normalizedDni, passwordHash, loginEnabledValue]
-        });
+        const { error: profileError } = await supabase
+            .from('app_users')
+            .insert({
+                id: authId,
+                username: normalizedDni,
+                name: normalizedName,
+                surname: normalizedSurname,
+                role: 'supervisor',
+                login_enabled: login_enabled !== false,
+            });
 
-        const newId = result.rows[0].id;
-        await ensureSupervisorStatusRow(newId);
+        if (profileError) {
+            await supabase.auth.admin.deleteUser(authId);
+            throw profileError;
+        }
 
-        return Response.json(sanitizeSupervisorRow({
-            id: newId,
+        const { data: sup, error: supError } = await supabase
+            .from('supervisors')
+            .insert({ app_user_id: authId })
+            .select('id')
+            .single();
+
+        if (supError) {
+            await supabase.auth.admin.deleteUser(authId);
+            throw supError;
+        }
+
+        await ensureSupervisorStatusRow(sup.id);
+
+        return Response.json({
+            id: sup.id,
             name: normalizedName,
             surname: normalizedSurname,
             dni: normalizedDni,
-            login_enabled: loginEnabledValue,
-            has_password: 1,
-            password_updated_at: new Date().toISOString(),
-        }), { status: 201 });
+            login_enabled: login_enabled !== false,
+        }, { status: 201 });
     } catch (error) {
         console.error('Error creating supervisor:', error);
         return Response.json({ error: 'Failed to create supervisor' }, { status: 500 });

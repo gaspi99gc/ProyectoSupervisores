@@ -1,51 +1,58 @@
-import { db } from '@/lib/db';
-import { verifyPassword } from '@/lib/passwords';
-import { ensureAppUsersTable } from '@/lib/app-users-auth';
-import { ensureSupervisorStatusRow } from '@/lib/supervisor-status';
+import { supabase, supabaseAuth } from '@/lib/db';
 
 export async function POST(req) {
     try {
         const { username, dni, password } = await req.json();
-        const loginUsername = (username || dni || '').toString().trim();
+        const loginUsername = (username || dni || '').toString().trim().toLowerCase();
         const loginPassword = (password || '').toString();
 
         if (!loginUsername || !loginPassword) {
             return Response.json({ error: 'Usuario y contraseña son requeridos' }, { status: 400 });
         }
 
-        await ensureAppUsersTable();
+        const email = `${loginUsername}@lasia.com.ar`;
 
-        const { rows } = await db.execute({
-            sql: 'SELECT id, username, name, surname, role, password_hash, login_enabled, supervisor_id FROM app_users WHERE username = ?',
-            args: [loginUsername]
+        const { data: authData, error: authError } = await supabaseAuth.auth.signInWithPassword({
+            email,
+            password: loginPassword,
         });
 
-        if (rows.length === 0) {
+        if (authError) {
             return Response.json({ error: 'Usuario o contraseña incorrectos' }, { status: 401 });
         }
 
-        const appUser = rows[0];
+        const { data: profile, error: profileError } = await supabase
+            .from('app_users')
+            .select('id, username, name, surname, role, login_enabled')
+            .eq('id', authData.user.id)
+            .single();
 
-        if (!appUser.login_enabled) {
-            return Response.json({ error: 'Tu acceso esta deshabilitado. Contactá al administrador.' }, { status: 403 });
+        if (profileError || !profile) {
+            return Response.json({ error: 'Usuario o contraseña incorrectos' }, { status: 401 });
         }
 
-        if (!verifyPassword(loginPassword, appUser.password_hash)) {
-            return Response.json({ error: 'Usuario o contraseña incorrectos' }, { status: 401 });
+        if (!profile.login_enabled) {
+            return Response.json({ error: 'Tu acceso está deshabilitado. Contactá al administrador.' }, { status: 403 });
+        }
+
+        let supervisorIntId = null;
+        if (profile.role === 'supervisor') {
+            const { data: sup } = await supabase
+                .from('supervisors')
+                .select('id')
+                .eq('app_user_id', profile.id)
+                .single();
+            supervisorIntId = sup?.id || null;
         }
 
         const user = {
-            id: appUser.role === 'supervisor' ? appUser.supervisor_id : appUser.id,
-            app_user_id: appUser.id,
-            name: appUser.name,
-            surname: appUser.surname,
-            dni: appUser.username,
-            role: appUser.role
+            id: profile.role === 'supervisor' ? supervisorIntId : profile.id,
+            app_user_id: profile.id,
+            name: profile.name,
+            surname: profile.surname,
+            dni: profile.username,
+            role: profile.role,
         };
-
-        if (appUser.role === 'supervisor' && appUser.supervisor_id) {
-            await ensureSupervisorStatusRow(appUser.supervisor_id);
-        }
 
         return Response.json({ user });
     } catch (error) {

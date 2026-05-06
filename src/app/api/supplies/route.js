@@ -1,9 +1,14 @@
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/db';
 
 export async function GET() {
     try {
-        const { rows } = await db.execute('SELECT * FROM supplies WHERE activo = 1 ORDER BY nombre ASC');
-        return Response.json(rows);
+        const { data, error } = await supabase
+            .from('supplies')
+            .select('*')
+            .order('nombre', { ascending: true });
+
+        if (error) throw error;
+        return Response.json(data || []);
     } catch (error) {
         console.error('Error fetching supplies:', error);
         return Response.json({ error: 'Failed to fetch supplies' }, { status: 500 });
@@ -12,14 +17,20 @@ export async function GET() {
 
 export async function POST(req) {
     try {
-        const { nombre, unidad } = await req.json();
+        const { nombre, unidad, activo } = await req.json();
 
-        const result = await db.execute({
-            sql: 'INSERT INTO supplies (nombre, unidad) VALUES (?, ?) RETURNING id',
-            args: [nombre, unidad || 'unidades']
-        });
+        if (!nombre?.trim()) {
+            return Response.json({ error: 'El nombre es obligatorio' }, { status: 400 });
+        }
 
-        return Response.json({ id: result.rows[0].id, nombre, unidad, activo: 1 }, { status: 201 });
+        const { data, error } = await supabase
+            .from('supplies')
+            .insert({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return Response.json(data, { status: 201 });
     } catch (error) {
         console.error('Error creating supply:', error);
         return Response.json({ error: 'Failed to create supply' }, { status: 500 });
