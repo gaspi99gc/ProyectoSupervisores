@@ -1,28 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const anonKey = process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !serviceRoleKey) {
-    console.error('❌ Missing Supabase environment variables.');
+function lazyClient(getKey) {
+    let client = null;
+    return new Proxy({}, {
+        get(_, prop) {
+            if (!client) {
+                const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+                const key = getKey();
+                client = createClient(url, key, {
+                    auth: { autoRefreshToken: false, persistSession: false },
+                });
+            }
+            const val = client[prop];
+            return typeof val === 'function' ? val.bind(client) : val;
+        },
+    });
 }
 
 // Admin client (service role) — for DB operations and admin auth actions
-export const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-    }
-});
+export const supabase = lazyClient(() => process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 // Auth client (anon key) — for user-facing signInWithPassword
-export const supabaseAuth = createClient(supabaseUrl, anonKey, {
-    auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-    }
-});
+export const supabaseAuth = lazyClient(
+    () => process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // Compatibility layer for simple SQL patterns
 export const db = {
