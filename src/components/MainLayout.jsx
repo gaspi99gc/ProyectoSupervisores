@@ -61,7 +61,7 @@ export default function MainLayout({ children }) {
                         { href: '/', label: 'Dashboard', icon: 'dashboard', active: pathname === '/' },
                         { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
                         { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
-                        { href: '/presentismo-admin', label: 'Presentismo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                        { href: '/presentismo-admin', label: 'Presentismo en tiempo real', icon: 'presentismo', active: pathname === '/presentismo-admin' },
                     ],
                 },
                 {
@@ -94,7 +94,7 @@ export default function MainLayout({ children }) {
                 {
                     title: 'Jefe Operativo',
                     items: [
-                        { href: '/presentismo-admin', label: 'Presentismo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                        { href: '/presentismo-admin', label: 'Presentismo en tiempo real', icon: 'presentismo', active: pathname === '/presentismo-admin' },
                         { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
                         { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
                     ],
