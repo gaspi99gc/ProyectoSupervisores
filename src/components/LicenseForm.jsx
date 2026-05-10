@@ -11,9 +11,9 @@ const LICENSE_TYPES = [
     { value: 'sin_goce', label: 'Sin goce', color: '#6b7280' }
 ];
 
-export default function LicenseForm({ license, employees, onSave, onClose }) {
+export default function LicenseForm({ license, employees, onSave, onClose, defaultEmployeeId }) {
     const [formData, setFormData] = useState({
-        employee_id: '',
+        employee_id: defaultEmployeeId?.toString() || '',
         type: 'vacaciones',
         start_date: '',
         end_date: '',
@@ -74,21 +74,23 @@ export default function LicenseForm({ license, employees, onSave, onClose }) {
                 {error && <div className="error-message" style={{ color: 'var(--error)', marginBottom: '1rem', fontSize: '0.9rem' }}>{error}</div>}
                 
                 <form onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label>Empleado *</label>
-                        <select
-                            value={formData.employee_id}
-                            onChange={e => setFormData({ ...formData, employee_id: e.target.value })}
-                            required
-                        >
-                            <option value="">Seleccionar empleado...</option>
-                            {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>
-                                    {emp.apellido}, {emp.nombre} (Legajo: {emp.legajo})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {!defaultEmployeeId && (
+                        <div className="form-group">
+                            <label>Empleado *</label>
+                            <select
+                                value={formData.employee_id}
+                                onChange={e => setFormData({ ...formData, employee_id: e.target.value })}
+                                required
+                            >
+                                <option value="">Seleccionar empleado...</option>
+                                {employees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.apellido}, {emp.nombre} (Legajo: {emp.legajo})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     
                     <div className="form-group">
                         <label>Tipo de Licencia *</label>

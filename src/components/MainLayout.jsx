@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getSessionUser, clearSession } from '@/lib/session';
@@ -18,8 +18,11 @@ function NavIcon({ name }) {
     const icons = {
         dashboard: <><path d="M3 13h8V3H3z" /><path d="M13 21h8v-6h-8z" /><path d="M13 10h8V3h-8z" /><path d="M3 21h8v-4H3z" /></>,
         rrhh: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 8v6" /><path d="M23 11h-6" /></>,
-        supervisors: <><path d="M12 20h9" /><path d="M12 4h9" /><path d="M12 12h9" /><path d="M3 6h4" /><path d="M3 12h4" /><path d="M3 18h4" /><path d="M9 4v4" /><path d="M9 10v4" /><path d="M9 16v4" /></>,
-        presentismo: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+        personal: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></>,
+        periodos: <><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><path d="M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z" /><path d="m9 14 2 2 4-4" /></>,
+        licencias: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M6 9h4" /><path d="M6 13h2" /><circle cx="16" cy="11" r="2" /><path d="M13 17c0-1.7 1.3-3 3-3s3 1.3 3 3" /></>,
+        supervisors: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-5-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
+        presentismo: <><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></>,
         users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>,
         supply: <><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line x1="3" y1="6" x2="21" y2="6" /><path d="M16 10a4 4 0 0 1-8 0" /></>,
         config: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.09V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9.2 20a1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.09-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4 9.2a1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.09V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 14 4a1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.27.3.47.65.6 1 .08.28.38.6 1.09.6H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.4Z" /></>,
@@ -45,6 +48,8 @@ export default function MainLayout({ children }) {
     const [themeLoaded, setThemeLoaded] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const tabParam = searchParams.get('tab');
 
     const getInitials = () => {
         const name = currentUser?.name?.trim()?.[0] || 'L';
@@ -59,9 +64,16 @@ export default function MainLayout({ children }) {
                     title: 'General',
                     items: [
                         { href: '/', label: 'Dashboard', icon: 'dashboard', active: pathname === '/' },
-                        { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
                         { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
-                        { href: '/presentismo-admin', label: 'Presentismo en tiempo real', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                        { href: '/presentismo-admin', label: 'Asistencia en vivo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
+                    ],
+                },
+                {
+                    title: 'RRHH',
+                    items: [
+                        { href: '/rrhh?tab=personal', label: 'Personal', icon: 'personal', active: pathname === '/rrhh' && tabParam !== 'periodos' && tabParam !== 'licencias' },
+                        { href: '/rrhh?tab=periodos', label: 'Periodos de prueba', icon: 'periodos', active: pathname === '/rrhh' && tabParam === 'periodos' },
+                        { href: '/rrhh?tab=licencias', label: 'Licencias', icon: 'licencias', active: pathname === '/rrhh' && tabParam === 'licencias' },
                     ],
                 },
                 {
@@ -92,11 +104,18 @@ export default function MainLayout({ children }) {
         if (currentUser?.role === 'jefe_operativo') {
             return [
                 {
-                    title: 'Jefe Operativo',
+                    title: 'Supervisión',
                     items: [
-                        { href: '/presentismo-admin', label: 'Presentismo en tiempo real', icon: 'presentismo', active: pathname === '/presentismo-admin' },
-                        { href: '/rrhh', label: 'RRHH', icon: 'rrhh', active: pathname === '/rrhh' || pathname === '/periodo-prueba' },
+                        { href: '/presentismo-admin', label: 'Asistencia en vivo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
                         { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
+                    ],
+                },
+                {
+                    title: 'RRHH',
+                    items: [
+                        { href: '/rrhh?tab=personal', label: 'Personal', icon: 'personal', active: pathname === '/rrhh' && tabParam !== 'periodos' && tabParam !== 'licencias' },
+                        { href: '/rrhh?tab=periodos', label: 'Periodos de prueba', icon: 'periodos', active: pathname === '/rrhh' && tabParam === 'periodos' },
+                        { href: '/rrhh?tab=licencias', label: 'Licencias', icon: 'licencias', active: pathname === '/rrhh' && tabParam === 'licencias' },
                     ],
                 },
             ];
@@ -162,9 +181,10 @@ export default function MainLayout({ children }) {
         if (pathname === '/compras') return 'Compras';
         if (pathname === '/compras/servicios') return 'Servicios';
         if (pathname === '/compras/realizados') return 'Pedidos Completos';
-        if (pathname === '/rrhh' || pathname === '/periodo-prueba') return 'RRHH';
+        if (pathname === '/rrhh') return tabParam === 'periodos' ? 'Periodos de prueba' : tabParam === 'licencias' ? 'Licencias' : 'Personal';
+        if (pathname === '/periodo-prueba') return 'Periodos de prueba';
         if (pathname === '/supervisores') return 'Supervisores';
-        if (pathname === '/presentismo-admin') return 'Presentismo';
+        if (pathname === '/presentismo-admin') return 'Asistencia en vivo';
         if (pathname === '/usuarios') return 'Usuarios';
         if (pathname === '/compras/insumos') return 'Insumos';
         if (pathname === '/config') return 'Configuracion';

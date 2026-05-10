@@ -3,12 +3,14 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { formatArgentinaDate, formatArgentinaDateTime, getArgentinaDateStamp, parseAppDate, toArgentinaDateInputValue } from '@/lib/datetime';
 import LicensesView from './LicensesView';
+import LicenseForm from './LicenseForm';
 import { useCatalog } from '@/lib/CatalogContext';
 
 export default function HRSection({ initialTab = 'personal' }) {
     const [sectionTab, setSectionTab] = useState(initialTab);
     const [subView, setSubView] = useState('nomina');
     const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+    const [perfilTab, setPerfilTab] = useState('documentos');
     const [showForm, setShowForm] = useState(false);
     const [editingEmployee, setEditingEmployee] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -24,6 +26,10 @@ export default function HRSection({ initialTab = 'personal' }) {
     const [documentTypes, setDocumentTypes] = useState([]);
     const [employeeDocuments, setEmployeeDocuments] = useState([]); // In a real app, fetch per employee. Keeping it simple for migration.
     const [auditLogs, setAuditLogs] = useState([]);
+    const [employeeLicenses, setEmployeeLicenses] = useState([]);
+    const [licensesLoading, setLicensesLoading] = useState(false);
+    const [showLicenseForm, setShowLicenseForm] = useState(false);
+    const [editingLicense, setEditingLicense] = useState(null);
 
     useEffect(() => {
         const loadInitialData = async () => {
@@ -53,6 +59,16 @@ export default function HRSection({ initialTab = 'personal' }) {
     useEffect(() => {
         setVisibleCount(50);
     }, [searchTerm, filters]);
+
+    useEffect(() => {
+        if (!selectedEmployeeId) return;
+        setLicensesLoading(true);
+        fetch(`/api/licenses?employee_id=${selectedEmployeeId}`)
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setEmployeeLicenses(Array.isArray(data) ? data : []))
+            .catch(() => setEmployeeLicenses([]))
+            .finally(() => setLicensesLoading(false));
+    }, [selectedEmployeeId]);
 
     const addAudit = (accion, entidad, entidad_id, detalle) => {
         const newLog = {
@@ -397,7 +413,7 @@ export default function HRSection({ initialTab = 'personal' }) {
         <div className="periodos-rrhh-view">
             <header className="page-header" style={{ marginBottom: '2rem' }}>
                 <div>
-                    <h1>Períodos de Prueba</h1>
+                    <h1>Periodos de prueba</h1>
                     <p style={{ color: 'var(--text-muted)' }}>Seguimiento centralizado de vencimientos y estabilidad laboral</p>
                 </div>
                 <div className="page-header-actions">
@@ -475,7 +491,7 @@ export default function HRSection({ initialTab = 'personal' }) {
         <div className="nomina-view">
             <header className="page-header" style={{ marginBottom: '2rem' }}>
                 <div>
-                    <h1>Legajos del Personal</h1>
+                    <h1>Personal</h1>
                     <p style={{ color: 'var(--text-muted)' }}>Gestión integral de la nómina LASIA</p>
                 </div>
                 <div className="hr-header-actions">
@@ -525,7 +541,7 @@ export default function HRSection({ initialTab = 'personal' }) {
                             {filteredEmployees.slice(0, visibleCount).map(emp => {
                                 return (
                                     <tr key={emp.id} className="clickable-row">
-                                        <td data-label="Nombre Completo" onClick={() => { setSelectedEmployeeId(emp.id); setSubView('perfil'); }}>
+                                        <td data-label="Nombre Completo" onClick={() => { setSelectedEmployeeId(emp.id); setSubView('perfil'); setPerfilTab('documentos'); }}>
                                             <div style={{ fontWeight: 700 }}>{emp.apellido}, {emp.nombre}</div>
                                             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Legajo: {emp.legajo}</div>
                                         </td>
@@ -542,7 +558,7 @@ export default function HRSection({ initialTab = 'personal' }) {
                                         <td data-label="Ingreso">{formatArgentinaDate(emp.fecha_ingreso)}</td>
                                         <td data-label="Acción" className="mobile-hide-label">
                                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                <button className="btn btn-secondary" style={{ padding: '0.4rem' }} onClick={() => { setSelectedEmployeeId(emp.id); setSubView('perfil'); }}>👁</button>
+                                                <button className="btn btn-secondary" style={{ padding: '0.4rem' }} onClick={() => { setSelectedEmployeeId(emp.id); setSubView('perfil'); setPerfilTab('documentos'); }}>👁</button>
                                                 <button className="btn btn-secondary" style={{ padding: '0.4rem' }} onClick={(e) => { e.stopPropagation(); setEditingEmployee(emp); setShowForm(true); }}>✏</button>
                                             </div>
                                         </td>
@@ -616,6 +632,22 @@ export default function HRSection({ initialTab = 'personal' }) {
                     </div>
                 </div>
 
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <button
+                        className={`btn ${perfilTab === 'documentos' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setPerfilTab('documentos')}
+                    >
+                        Documentación
+                    </button>
+                    <button
+                        className={`btn ${perfilTab === 'licencias' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setPerfilTab('licencias')}
+                    >
+                        Licencias
+                    </button>
+                </div>
+
+                {perfilTab === 'documentos' && (
                 <div className="profile-split-grid">
                     <div className="card" style={{ padding: 0 }}>
                         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
@@ -674,6 +706,95 @@ export default function HRSection({ initialTab = 'personal' }) {
                         </div>
                     </div>
                 </div>
+                )}
+
+                {showLicenseForm && (
+                    <LicenseForm
+                        license={editingLicense}
+                        employees={employees}
+                        defaultEmployeeId={emp.id}
+                        onSave={(saved) => {
+                            setEmployeeLicenses(prev =>
+                                editingLicense
+                                    ? prev.map(l => l.id === saved.id ? { ...l, ...saved } : l)
+                                    : [saved, ...prev]
+                            );
+                        }}
+                        onClose={() => { setShowLicenseForm(false); setEditingLicense(null); }}
+                    />
+                )}
+
+                {perfilTab === 'licencias' && (
+                    <div className="card" style={{ padding: 0 }}>
+                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <h3 style={{ margin: 0 }}>Licencias de {emp.nombre} {emp.apellido}</h3>
+                            <button className="btn btn-primary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.88rem' }} onClick={() => setShowLicenseForm(true)}>
+                                + Nueva Licencia
+                            </button>
+                        </div>
+                        {licensesLoading ? (
+                            <p style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>Cargando...</p>
+                        ) : employeeLicenses.length === 0 ? (
+                            <p style={{ padding: '1.5rem', color: 'var(--text-muted)' }}>No hay licencias registradas para este empleado.</p>
+                        ) : (
+                            <div className="table-container">
+                                <table className="table mobile-cards-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Tipo</th>
+                                            <th>Desde</th>
+                                            <th>Hasta</th>
+                                            <th>Estado</th>
+                                            <th>Notas</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {employeeLicenses.map(lic => (
+                                            <tr key={lic.id}>
+                                                <td data-label="Tipo" style={{ fontWeight: 600, textTransform: 'capitalize' }}>
+                                                    {lic.type?.replace('_', ' ')}
+                                                </td>
+                                                <td data-label="Desde">{formatArgentinaDate(lic.start_date)}</td>
+                                                <td data-label="Hasta">{formatArgentinaDate(lic.end_date)}</td>
+                                                <td data-label="Estado">
+                                                    <span className={`badge ${lic.status === 'activa' ? 'badge-success' : 'badge-secondary'}`}>
+                                                        {lic.status === 'activa' ? 'Activa' : 'Finalizada'}
+                                                    </span>
+                                                </td>
+                                                <td data-label="Notas" style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+                                                    {lic.notes || '---'}
+                                                </td>
+                                                <td className="mobile-hide-label">
+                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
+                                                            onClick={() => { setEditingLicense(lic); setShowLicenseForm(true); }}
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-secondary"
+                                                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', color: 'var(--error)' }}
+                                                            onClick={async () => {
+                                                                if (!confirm('¿Eliminar esta licencia?')) return;
+                                                                const res = await fetch(`/api/licenses/${lic.id}`, { method: 'DELETE' });
+                                                                if (res.ok) setEmployeeLicenses(prev => prev.filter(l => l.id !== lic.id));
+                                                            }}
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         );
     };
@@ -744,8 +865,6 @@ export default function HRSection({ initialTab = 'personal' }) {
 
     return (
         <div className="hr-section-v3">
-            {renderTabs()}
-            
             {sectionTab === 'personal' && subView === 'nomina' && renderNomina()}
             {sectionTab === 'personal' && subView === 'perfil' && renderPerfil()}
             {sectionTab === 'personal' && subView === 'admin' && renderAdmin()}
