@@ -92,6 +92,42 @@ export default function SupervisoresPage() {
 
                 <div className="grid" style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
                     <div className="card" style={{ padding: 0 }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                            <h3>Directorio de Supervisores</h3>
+                        </div>
+                        <div className="table-container">
+                            <table className="table mobile-cards-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre Completo</th>
+                                        <th>DNI</th>
+                                        <th style={{ textAlign: 'right' }}>Presentismo 7 días</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {supervisors.map(sup => (
+                                        <tr key={sup.id}>
+                                            <td data-label="Nombre Completo"><strong>{sup.surname}, {sup.name}</strong></td>
+                                            <td data-label="DNI">{sup.dni}</td>
+                                            <td data-label="Presentismo 7 días" className="mobile-hide-label" style={{ textAlign: 'right' }}>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    onClick={() => handleDownloadPresentismo(sup)}
+                                                    disabled={!sup.id || downloadingSupervisorId === sup.id}
+                                                >
+                                                    <span className="desktop-only">{sup.id && downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
+                                                    <span className="mobile-only">{sup.id && downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className="card" style={{ padding: 0 }}>
                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
                             <h3 style={{ margin: 0 }}>Registro de Presentismo Reciente</h3>
                             <div style={{ display: 'flex', flexDirection: 'row', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -165,42 +201,6 @@ export default function SupervisoresPage() {
                                         </tr>
                                     );
                                     })()}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div className="card" style={{ padding: 0 }}>
-                        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                            <h3>Directorio de Supervisores</h3>
-                        </div>
-                        <div className="table-container">
-                            <table className="table mobile-cards-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nombre Completo</th>
-                                        <th>DNI</th>
-                                        <th style={{ textAlign: 'right' }}>Presentismo 7 días</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {supervisors.map(sup => (
-                                        <tr key={sup.id}>
-                                            <td data-label="Nombre Completo"><strong>{sup.surname}, {sup.name}</strong></td>
-                                            <td data-label="DNI">{sup.dni}</td>
-                                            <td data-label="Presentismo 7 días" className="mobile-hide-label" style={{ textAlign: 'right' }}>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-secondary"
-                                                    onClick={() => handleDownloadPresentismo(sup)}
-                                                    disabled={!sup.id || downloadingSupervisorId === sup.id}
-                                                >
-                                                    <span className="desktop-only">{sup.id && downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
-                                                    <span className="mobile-only">{sup.id && downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
                                 </tbody>
                             </table>
                         </div>
