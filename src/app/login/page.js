@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { saveSession } from '@/lib/session';
+import { useTheme } from '@/lib/ThemeContext';
 
 export default function LoginScreen() {
     const [username, setUsername] = useState('');
@@ -12,22 +13,8 @@ export default function LoginScreen() {
     const [isBiometricLoading, setIsBiometricLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const passwordRef = useRef(null);
-    const [themeMode, setThemeMode] = useState('light');
+    const { themeMode, toggleTheme } = useTheme();
     const router = useRouter();
-
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('themeMode');
-        const initialTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light';
-        setThemeMode(initialTheme);
-        document.documentElement.dataset.theme = initialTheme;
-        document.documentElement.style.colorScheme = initialTheme;
-    }, []);
-
-    useEffect(() => {
-        document.documentElement.dataset.theme = themeMode;
-        document.documentElement.style.colorScheme = themeMode;
-        localStorage.setItem('themeMode', themeMode);
-    }, [themeMode]);
 
     const ROLE_REDIRECT = {
         admin: '/',
@@ -280,7 +267,7 @@ export default function LoginScreen() {
                         <input
                             type="checkbox"
                             checked={themeMode === 'dark'}
-                            onChange={() => setThemeMode((current) => current === 'dark' ? 'light' : 'dark')}
+                            onChange={toggleTheme}
                         />
                         <span className="theme-switch-track">
                             <span className="theme-switch-thumb" />

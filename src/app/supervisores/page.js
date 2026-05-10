@@ -2,23 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import MainLayout from '@/components/MainLayout';
-import SearchableSelect from '@/components/SearchableSelect';
 import { formatArgentinaDateTime } from '@/lib/datetime';
 import { useCatalog } from '@/lib/CatalogContext';
 
-
 export default function SupervisoresPage() {
     const { supervisors } = useCatalog();
-    const [attendance, setAttendance] = useState([]);
+    const [todayLogs, setTodayLogs] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [filterSupervisor, setFilterSupervisor] = useState('');
-    const [filterService, setFilterService] = useState('');
     const [downloadingSupervisorId, setDownloadingSupervisorId] = useState(null);
-    const [tabParam, setTabParam] = useState(null);
-
-    useEffect(() => {
-        setTabParam(new URLSearchParams(window.location.search).get('tab'));
-    }, []);
 
     const handleDownloadPresentismo = async (supervisor) => {
         const { default: Swal } = await import('sweetalert2');
@@ -71,10 +62,29 @@ export default function SupervisoresPage() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const logsRes = await fetch('/api/presentismo-logs?days=7');
-                if (logsRes.ok) setAttendance(await logsRes.json());
+                const res = await fetch('/api/presentismo-logs?days=1');
+                if (res.ok) {
+                    const all = await res.json();
+
+                    // Keep today's logs only (Argentina timezone)
+                    const todayAR = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+                    const todayFiltered = all.filter(log => {
+                        const logDate = new Date(log.occurred_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+                        return logDate === todayAR;
+                    });
+
+                    // Max 3 per supervisor, most recent first
+                    const countBySup = {};
+                    const limited = todayFiltered.filter(log => {
+                        const key = log.supervisor_id;
+                        countBySup[key] = (countBySup[key] || 0) + 1;
+                        return countBySup[key] <= 3;
+                    });
+
+                    setTodayLogs(limited);
+                }
             } catch (err) {
-                console.error("Error cargando datos:", err);
+                console.error('Error cargando datos:', err);
             } finally {
                 setLoading(false);
             }
@@ -88,14 +98,13 @@ export default function SupervisoresPage() {
     return (
         <MainLayout>
             <div className="supervisores-view">
-                <header className="page-header" style={{ marginBottom: '2rem', flexWrap: 'wrap' }}>
-                    <div>
-                        <h1>{tabParam === 'presentismo' ? 'Registro de Presentismo' : 'Supervisores'}</h1>
-                    </div>
+                <header className="page-header" style={{ marginBottom: '2rem' }}>
+                    <h1>Supervisores</h1>
                 </header>
 
                 <div className="grid" style={{ gridTemplateColumns: '1fr', gap: '2rem' }}>
-                    {tabParam !== 'presentismo' && <div className="card" style={{ padding: 0 }}>
+                    {/* Directorio */}
+                    <div className="card" style={{ padding: 0 }}>
                         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
                             <h3>Directorio de Supervisores</h3>
                         </div>
@@ -129,86 +138,49 @@ export default function SupervisoresPage() {
                                 </tbody>
                             </table>
                         </div>
-                    </div>}
+                    </div>
 
-                    {tabParam === 'presentismo' && <div className="card" style={{ padding: 0 }}>
-                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                            <h3 style={{ margin: 0 }}>Registro de Presentismo Reciente</h3>
-                            <div style={{ display: 'flex', flexDirection: 'row', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <div style={{ width: '200px' }}>
-                                    <select
-                                        value={filterSupervisor}
-                                        onChange={e => setFilterSupervisor(e.target.value)}
-                                        style={{ width: '100%', padding: '0.45rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.88rem', background: 'var(--color-surface)', color: 'var(--text-main)', cursor: 'pointer' }}
-                                    >
-                                        <option value="">Todos los supervisores</option>
-                                        {supervisors.map(s => (
-                                            <option key={s.id} value={`${s.surname}, ${s.name}`}>{s.surname}, {s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div style={{ width: '200px' }}>
-                                    <SearchableSelect
-                                        options={[...new Set(attendance.map(l => l.service_name).filter(Boolean))].sort().map(name => ({ value: name, label: name }))}
-                                        value={filterService}
-                                        onChange={setFilterService}
-                                        placeholder="Todos los servicios"
-                                        searchPlaceholder="Buscar servicio..."
-                                    />
-                                </div>
-                                {(filterSupervisor || filterService) && (
-                                    <button
-                                        onClick={() => { setFilterSupervisor(''); setFilterService(''); }}
-                                        style={{ padding: '0.45rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.88rem', background: 'var(--color-surface)', color: 'var(--text-muted)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                                    >
-                                        Limpiar
-                                    </button>
-                                )}
-                            </div>
+                    {/* Fichadas de hoy */}
+                    <div className="card" style={{ padding: 0 }}>
+                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                            <h3 style={{ margin: 0 }}>Fichadas de hoy</h3>
                         </div>
                         <div className="table-container">
-                            <table className="table mobile-cards-table">
-                                <thead>
-                                    <tr>
-                                        <th>Fecha y Hora</th>
-                                        <th>Supervisor</th>
-                                        <th>Servicio</th>
-                                        <th>Evento</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(() => {
-                                        const filtered = attendance.filter(log => {
-                                            const matchSup = !filterSupervisor || `${log.supervisor_surname}, ${log.supervisor_name}` === filterSupervisor;
-                                            const matchSvc = !filterService || log.service_name === filterService;
-                                            return matchSup && matchSvc;
-                                        });
-                                        return filtered.length > 0 ? filtered.map(log => (
-                                        <tr key={log.id}>
-                                            <td data-label="Fecha y Hora">{formatArgentinaDateTime(log.occurred_at)}</td>
-                                            <td data-label="Supervisor">
-                                                <strong>{log.supervisor_surname}, {log.supervisor_name}</strong>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>DNI: {log.supervisor_dni}</div>
-                                            </td>
-                                            <td data-label="Servicio">{log.service_name || 'Sin servicio'}</td>
-                                            <td data-label="Evento">
-                                                <span className={`badge ${log.event_type === 'ingreso' ? 'badge-success' : 'badge-secondary'}`}>
-                                                    {log.event_type === 'ingreso' ? 'Ingreso' : 'Salida'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    )) : (
+                            {todayLogs.length === 0 ? (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    No hay fichadas registradas hoy.
+                                </div>
+                            ) : (
+                                <table className="table mobile-cards-table">
+                                    <thead>
                                         <tr>
-                                            <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                                                No hay registros de presentismo en los últimos 7 días.
-                                            </td>
+                                            <th>Hora</th>
+                                            <th>Supervisor</th>
+                                            <th>Servicio</th>
+                                            <th>Evento</th>
                                         </tr>
-                                    );
-                                    })()}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {todayLogs.map(log => (
+                                            <tr key={log.id}>
+                                                <td data-label="Hora">{formatArgentinaDateTime(log.occurred_at)}</td>
+                                                <td data-label="Supervisor">
+                                                    <strong>{log.supervisor_surname}, {log.supervisor_name}</strong>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>DNI: {log.supervisor_dni}</div>
+                                                </td>
+                                                <td data-label="Servicio">{log.service_name || 'Sin servicio'}</td>
+                                                <td data-label="Evento">
+                                                    <span className={`badge ${log.event_type === 'ingreso' ? 'badge-success' : 'badge-secondary'}`}>
+                                                        {log.event_type === 'ingreso' ? 'Ingreso' : 'Salida'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
-                    </div>}
+                    </div>
                 </div>
             </div>
         </MainLayout>

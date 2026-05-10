@@ -627,6 +627,34 @@ label {
   font-size: 0.95rem;
 }
 
+[data-theme='dark'] .login-container {
+  background: #0B1220;
+}
+
+[data-theme='dark'] .login-container::before {
+  opacity: 0.06;
+}
+
+[data-theme='dark'] .login-card {
+  background: #182334;
+  border-color: #304257;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .login-card label {
+  color: #E5EDF5;
+}
+
+[data-theme='dark'] .login-card input {
+  background: #111827;
+  border-color: #304257;
+  color: #E5EDF5;
+}
+
+[data-theme='dark'] .login-card input::placeholder {
+  color: #64748B;
+}
+
 .mobile-topbar,
 .mobile-menu-button,
 .mobile-menu-close,

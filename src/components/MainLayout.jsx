@@ -1,10 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getSessionUser, clearSession } from '@/lib/session';
+import { useTheme } from '@/lib/ThemeContext';
+
+function TabParamReader({ onTab }) {
+    const params = useSearchParams();
+    useEffect(() => {
+        onTab(params.get('tab'));
+    }, [params, onTab]);
+    return null;
+}
 
 function Icon({ children, size = 18, stroke = 1.8 }) {
     return (
@@ -44,15 +53,10 @@ function NavIcon({ name }) {
 export default function MainLayout({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [themeMode, setThemeMode] = useState('light');
-    const [themeLoaded, setThemeLoaded] = useState(false);
+    const { themeMode, toggleTheme } = useTheme();
     const router = useRouter();
     const pathname = usePathname();
     const [tabParam, setTabParam] = useState(null);
-
-    useEffect(() => {
-        setTabParam(new URLSearchParams(window.location.search).get('tab'));
-    }, [pathname]);
 
     const getInitials = () => {
         const name = currentUser?.name?.trim()?.[0] || 'L';
@@ -109,8 +113,7 @@ export default function MainLayout({ children }) {
                     title: 'Supervisión',
                     items: [
                         { href: '/presentismo-admin', label: 'Asistencia en vivo', icon: 'presentismo', active: pathname === '/presentismo-admin' },
-                        { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' && tabParam !== 'presentismo' },
-                        { href: '/supervisores?tab=presentismo', label: 'Registro de Presentismo', icon: 'supervisors', active: pathname === '/supervisores' && tabParam === 'presentismo' },
+                        { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
                     ],
                 },
                 {
@@ -148,27 +151,6 @@ export default function MainLayout({ children }) {
         }
     }, [router]);
 
-    useEffect(() => {
-        const savedTheme = localStorage.getItem('themeMode');
-        const initialTheme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'light';
-
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setThemeMode(initialTheme);
-        document.documentElement.dataset.theme = initialTheme;
-        document.documentElement.style.colorScheme = initialTheme;
-        setThemeLoaded(true);
-    }, []);
-
-    useEffect(() => {
-        if (!themeLoaded) {
-            return;
-        }
-
-        document.documentElement.dataset.theme = themeMode;
-        document.documentElement.style.colorScheme = themeMode;
-        localStorage.setItem('themeMode', themeMode);
-    }, [themeMode, themeLoaded]);
-
     const handleLogout = () => {
         clearSession();
         setCurrentUser(null);
@@ -205,6 +187,9 @@ export default function MainLayout({ children }) {
 
     return (
         <div className="app-wrapper">
+            <Suspense fallback={null}>
+                <TabParamReader onTab={setTabParam} />
+            </Suspense>
             <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
                 <div className="sidebar-logo">
                     <Image
@@ -256,7 +241,7 @@ export default function MainLayout({ children }) {
                             <input
                                 type="checkbox"
                                 checked={themeMode === 'dark'}
-                                onChange={() => setThemeMode((current) => current === 'dark' ? 'light' : 'dark')}
+                                onChange={toggleTheme}
                             />
                             <span className="theme-switch-track">
                                 <span className="theme-switch-thumb" />

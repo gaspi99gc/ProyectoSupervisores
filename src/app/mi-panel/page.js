@@ -75,9 +75,16 @@ export default function SupervisorHomePage() {
 
     const filteredServices = useMemo(() => {
         const q = normalize(searchText);
-        if (!q || selectedServiceId) return services;
-        return services.filter((s) => normalize(s.name).includes(q) || normalize(s.address).includes(q));
-    }, [searchText, selectedServiceId, services]);
+        const pool = q && !selectedServiceId
+            ? sortedServices.filter((s) => normalize(s.name).includes(q) || normalize(s.address).includes(q))
+            : sortedServices;
+
+        if (!pool.length) return [];
+
+        const [nearest, ...rest] = pool;
+        const alphabetical = [...rest].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        return [{ ...nearest, _recommended: true }, ...alphabetical];
+    }, [searchText, selectedServiceId, sortedServices]);
 
     // Sync search text when initial status loads (supervisor already checked in)
     useEffect(() => {
@@ -268,7 +275,7 @@ export default function SupervisorHomePage() {
                                 placeholder={
                                     isLoading ? 'Cargando servicios...'
                                     : services.length === 0 ? 'No hay servicios cargados'
-                                    : 'Buscar por nombre o dirección...'
+                                    : 'Buscar servicio...'
                                 }
                                 value={searchText}
                                 onChange={(e) => {
@@ -313,28 +320,23 @@ export default function SupervisorHomePage() {
                                             }}
                                             style={{
                                                 display: 'block', width: '100%', textAlign: 'left',
-                                                padding: '0.75rem 1rem', background: 'none', border: 'none',
+                                                padding: '0.75rem 1rem', background: service._recommended ? 'var(--color-primary-light, #f0f7ff)' : 'none', border: 'none',
                                                 borderBottom: '1px solid var(--border-color)',
                                                 cursor: 'pointer', color: 'var(--text-main)',
                                             }}
                                         >
-                                            <div style={{ fontWeight: 600 }}>{service.name}</div>
-                                            {service.address && (
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                                                    {formatServiceAddress(service.address)}
+                                            {service._recommended && (
+                                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem' }}>
+                                                    Recomendado
                                                 </div>
                                             )}
+                                            <div style={{ fontWeight: 600 }}>{service.name}</div>
                                         </button>
                                     ))}
                                 </div>
                             )}
                         </div>
 
-                        {selectedService ? (
-                            <div className="placeholder-field" style={{ marginTop: '0.75rem' }}>
-                                {formatServiceAddress(selectedService.address)}
-                            </div>
-                        ) : null}
                     </div>
 
                     <button

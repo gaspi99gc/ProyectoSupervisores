@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { CatalogProvider } from '@/lib/CatalogContext';
+import { ThemeProvider } from '@/lib/ThemeContext';
 
 const geistSans = Geist({
   variable: '--font-sans',
@@ -19,12 +20,26 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
-      <head></head>
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            try {
+              var t = localStorage.getItem('themeMode');
+              if (t === 'dark' || t === 'light') {
+                document.documentElement.dataset.theme = t;
+                document.documentElement.style.colorScheme = t;
+              }
+            } catch(e) {}
+          })();
+        ` }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <CatalogProvider>
-          {children}
-        </CatalogProvider>
+        <ThemeProvider>
+          <CatalogProvider>
+            {children}
+          </CatalogProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
