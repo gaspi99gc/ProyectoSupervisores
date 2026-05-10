@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getSessionUser, clearSession } from '@/lib/session';
@@ -48,8 +48,11 @@ export default function MainLayout({ children }) {
     const [themeLoaded, setThemeLoaded] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
-    const searchParams = useSearchParams();
-    const tabParam = searchParams.get('tab');
+    const [tabParam, setTabParam] = useState(null);
+
+    useEffect(() => {
+        setTabParam(new URLSearchParams(window.location.search).get('tab'));
+    }, [pathname]);
 
     const getInitials = () => {
         const name = currentUser?.name?.trim()?.[0] || 'L';
