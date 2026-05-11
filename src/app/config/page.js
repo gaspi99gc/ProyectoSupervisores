@@ -444,7 +444,6 @@ export default function ConfigPage() {
                                     <tr>
                                         <th>Servicio</th>
                                         <th>Ubicación</th>
-                                        <th>Coordenadas</th>
                                         <th style={{ textAlign: 'right' }}>Acciones</th>
                                     </tr>
                                 </thead>
@@ -453,11 +452,6 @@ export default function ConfigPage() {
                                         <tr key={s.id}>
                                             <td data-label="Servicio"><strong>{s.name}</strong></td>
                                             <td data-label="Ubicación">{s.address}</td>
-                                            <td data-label="Coordenadas" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                {s.lat && s.lng ? `${Number(s.lat)?.toFixed(4)}, ${Number(s.lng)?.toFixed(4)}` : (
-                                                    <span style={{ color: 'var(--warning)', fontWeight: 600 }}>⚠️ Sin GPS</span>
-                                                )}
-                                            </td>
                                             <td data-label="Acciones" className="mobile-hide-label" style={{ textAlign: 'right' }}>
                                                 <div className="table-action-group">
                                                     <button className="btn btn-secondary" onClick={() => openModal('service', s)}>✏️</button>
