@@ -71,7 +71,6 @@ export default function MainLayout({ children }) {
                     title: 'General',
                     items: [
                         { href: '/', label: 'Dashboard', icon: 'dashboard', active: pathname === '/' },
-                        { href: '/supervisores', label: 'Supervisores', icon: 'supervisors', active: pathname === '/supervisores' },
                     ],
                 },
                 {
@@ -83,10 +82,17 @@ export default function MainLayout({ children }) {
                     ],
                 },
                 {
+                    title: 'Supervisión',
+                    items: [
+                        { href: '/config?tab=supervisors', label: 'Supervisores', icon: 'supervisors', active: pathname === '/config' && (!tabParam || tabParam === 'supervisors') },
+                        { href: '/config?tab=services', label: 'Servicios', icon: 'servicios', active: pathname === '/config' && tabParam === 'services' },
+                        { href: '/config?tab=supplies', label: 'Insumos', icon: 'supply', active: pathname === '/config' && tabParam === 'supplies' },
+                    ],
+                },
+                {
                     title: 'Sistema',
                     items: [
                         { href: '/usuarios', label: 'Usuarios', icon: 'users', active: pathname === '/usuarios' },
-                        { href: '/config', label: 'Configuracion', icon: 'config', active: pathname === '/config' },
                     ],
                 },
             ];
@@ -173,7 +179,11 @@ export default function MainLayout({ children }) {
         if (pathname === '/presentismo-admin') return 'Asistencia en vivo';
         if (pathname === '/usuarios') return 'Usuarios';
         if (pathname === '/compras/insumos') return 'Insumos';
-        if (pathname === '/config') return 'Configuracion';
+        if (pathname === '/config') {
+            if (tabParam === 'services') return 'Servicios';
+            if (tabParam === 'supplies') return 'Insumos';
+            return 'Supervisores';
+        }
         if (pathname === '/mi-panel' || pathname === '/mi-panel/presentismo') return 'Presentismo';
         if (pathname === '/mi-panel/pedido-insumos') return 'Pedido de Insumos';
         if (pathname === '/compras/pedido-insumos') return 'Crear Pedido';

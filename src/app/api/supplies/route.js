@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function POST(req) {
     try {
-        const { nombre, unidad, activo } = await req.json();
+        const { nombre, unidad, activo, proveedor } = await req.json();
 
         if (!nombre?.trim()) {
             return Response.json({ error: 'El nombre es obligatorio' }, { status: 400 });
@@ -25,7 +25,7 @@ export async function POST(req) {
 
         const { data, error } = await supabase
             .from('supplies')
-            .insert({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false })
+            .insert({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false, proveedor: proveedor?.trim() || null })
             .select()
             .single();
 

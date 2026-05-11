@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import MainLayout from '@/components/MainLayout';
 import { useCatalog } from '@/lib/CatalogContext';
 
@@ -30,24 +31,24 @@ function PasswordInput({ placeholder, value, onChange, show, onToggle }) {
     );
 }
 
+function TabReader({ onTab }) {
+    const params = useSearchParams();
+    useEffect(() => {
+        const tab = params.get('tab');
+        onTab(tab && ['supervisors', 'services', 'supplies'].includes(tab) ? tab : 'supervisors');
+    }, [params, onTab]);
+    return null;
+}
+
 export default function ConfigPage() {
     const [configTab, setConfigTab] = useState('supervisors');
-
     const [editingEntity, setEditingEntity] = useState(null);
     const [formData, setFormData] = useState({});
-
     const { supervisors, services, supplies, refetch: refetchCatalog } = useCatalog();
-    const [appUsers, setAppUsers] = useState([]);
-
-    // Recorridos state
-    const [selectedSupervisorForRoute, setSelectedSupervisorForRoute] = useState('');
-    const [currentRoute, setCurrentRoute] = useState([]);
-    const [availableServices, setAvailableServices] = useState([]);
-    const [routeMessage, setRouteMessage] = useState(null);
     const [showModalPassword, setShowModalPassword] = useState(false);
     const [showModalConfirmPassword, setShowModalConfirmPassword] = useState(false);
     const [serviceSearchTerm, setServiceSearchTerm] = useState('');
-    const [routeServiceSearchTerm, setRouteServiceSearchTerm] = useState('');
+    const [suppliesImportModal, setSuppliesImportModal] = useState(null);
     const [serviceGeoState, setServiceGeoState] = useState({
         loading: false,
         text: '',
@@ -59,50 +60,12 @@ export default function ConfigPage() {
     const [serviceCandidates, setServiceCandidates] = useState([]);
     const [importModal, setImportModal] = useState(null);
 
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const usersRes = await fetch('/api/app-users');
-                if (usersRes.ok) setAppUsers(await usersRes.json());
-            } catch (err) {
-                console.error(err);
-            }
-        };
-        load();
-    }, []);
-
-    // Load route when supervisor selected
-    useEffect(() => {
-        if (!selectedSupervisorForRoute) {
-            setCurrentRoute([]);
-            return;
-        }
-        const loadRoute = async () => {
-            try {
-                const res = await fetch(`/api/supervisor-routes?supervisor_id=${selectedSupervisorForRoute}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setCurrentRoute(data);
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        };
-        loadRoute();
-    }, [selectedSupervisorForRoute]);
-
-    // Update available services (exclude already in route)
-    useEffect(() => {
-        const routeServiceIds = currentRoute.map(r => r.service_id);
-        setAvailableServices(services.filter(s => !routeServiceIds.includes(s.id)));
-    }, [currentRoute, services]);
-
     const getSearchableText = (value) => {
         return (value || '')
             .toString()
             .toLowerCase()
             .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '');
+            .replace(/[̀-ͯ]/g, '');
     };
 
     const geocodeServiceAddress = async (address) => {
@@ -111,13 +74,8 @@ export default function ConfigPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ address })
         });
-
         const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-            throw new Error(data.error || 'No se pudo ubicar la direccion ingresada.');
-        }
-
+        if (!res.ok) throw new Error(data.error || 'No se pudo ubicar la direccion ingresada.');
         return data.candidates || [];
     };
 
@@ -126,14 +84,7 @@ export default function ConfigPage() {
         setServiceCandidates([]);
         setShowModalPassword(false);
         setShowModalConfirmPassword(false);
-        setServiceGeoState({
-            loading: false,
-            text: '',
-            type: 'idle',
-            isValidated: false,
-            validatedAddress: '',
-            candidateId: '',
-        });
+        setServiceGeoState({ loading: false, text: '', type: 'idle', isValidated: false, validatedAddress: '', candidateId: '' });
     };
 
     const openModal = (type, data = null) => {
@@ -149,23 +100,6 @@ export default function ConfigPage() {
                 name: '',
                 surname: '',
                 dni: '',
-                login_enabled: true,
-                password: '',
-                confirmPassword: '',
-            });
-            setServiceGeoState({ loading: false, text: '', type: 'idle', isValidated: false, validatedAddress: '', candidateId: '' });
-        } else if (type === 'user') {
-            setFormData(data ? {
-                ...data,
-                username: data.username || '',
-                login_enabled: data.login_enabled !== false,
-                password: '',
-                confirmPassword: '',
-            } : {
-                name: '',
-                surname: '',
-                username: '',
-                role: 'supervisor',
                 login_enabled: true,
                 password: '',
                 confirmPassword: '',
@@ -198,7 +132,6 @@ export default function ConfigPage() {
     const handleServiceAddressChange = (value) => {
         const normalizedValue = value.trim();
         const keepValidatedAddress = normalizedValue && normalizedValue === serviceGeoState.validatedAddress;
-
         setFormData(prev => ({
             ...prev,
             address: value,
@@ -206,11 +139,7 @@ export default function ConfigPage() {
             lng: keepValidatedAddress ? prev.lng : '',
             geocodeCandidateId: keepValidatedAddress ? serviceGeoState.candidateId : '',
         }));
-
-        if (keepValidatedAddress) {
-            return;
-        }
-
+        if (keepValidatedAddress) return;
         setServiceCandidates([]);
         setServiceGeoState({
             loading: false,
@@ -228,7 +157,6 @@ export default function ConfigPage() {
             setServiceGeoState({ loading: false, text: 'Ingresá la direccion exacta para ubicar el servicio.', type: 'error', isValidated: false, validatedAddress: '', candidateId: '' });
             return;
         }
-
         try {
             setServiceGeoState({ loading: true, text: 'Buscando direcciones exactas en AMBA...', type: 'info', isValidated: false, validatedAddress: '', candidateId: '' });
             const candidates = await geocodeServiceAddress(formData.address);
@@ -275,7 +203,6 @@ export default function ConfigPage() {
         let endpoint = '/api/services';
         if (type === 'supervisor') endpoint = '/api/supervisors';
         else if (type === 'supply') endpoint = '/api/supplies';
-        else if (type === 'user') endpoint = '/api/app-users';
         const url = isEdit ? `${endpoint}/${editingEntity.data.id}` : endpoint;
         const method = isEdit ? 'PUT' : 'POST';
         let payload = formData;
@@ -286,60 +213,22 @@ export default function ConfigPage() {
                     alert('Completá nombre, apellido y DNI del supervisor.');
                     return;
                 }
-
                 if (!isEdit && !formData.password) {
                     alert('Definí una contraseña inicial para el supervisor.');
                     return;
                 }
-
                 if (formData.password && formData.password.length < 6) {
                     alert('La contraseña debe tener al menos 6 caracteres.');
                     return;
                 }
-
                 if ((formData.password || formData.confirmPassword) && formData.password !== formData.confirmPassword) {
                     alert('Las contraseñas no coinciden.');
                     return;
                 }
-
                 payload = {
                     name: formData.name.trim(),
                     surname: formData.surname.trim(),
                     dni: formData.dni.toString().trim(),
-                    login_enabled: formData.login_enabled !== false,
-                    password: formData.password || undefined,
-                };
-            } else if (type === 'user') {
-                if (!formData.name?.trim() || !formData.surname?.trim() || !formData.username?.toString().trim()) {
-                    alert('Completá nombre, apellido y DNI del usuario.');
-                    return;
-                }
-
-                if (!isEdit && !formData.password) {
-                    alert('Definí una contraseña inicial para el usuario.');
-                    return;
-                }
-
-                if (formData.password && formData.password.length < 6) {
-                    alert('La contraseña debe tener al menos 6 caracteres.');
-                    return;
-                }
-
-                if ((formData.password || formData.confirmPassword) && formData.password !== formData.confirmPassword) {
-                    alert('Las contraseñas no coinciden.');
-                    return;
-                }
-
-                if (!['admin', 'purchases', 'supervisor'].includes(formData.role)) {
-                    alert('Seleccioná un rol válido.');
-                    return;
-                }
-
-                payload = {
-                    username: formData.username.toString().trim(),
-                    name: formData.name.trim(),
-                    surname: formData.surname.trim(),
-                    role: formData.role,
                     login_enabled: formData.login_enabled !== false,
                     password: formData.password || undefined,
                 };
@@ -348,17 +237,14 @@ export default function ConfigPage() {
                     alert('Ingresá el nombre del servicio.');
                     return;
                 }
-
                 if (!formData.address?.trim()) {
                     alert('Ingresá la direccion exacta del servicio.');
                     return;
                 }
-
                 if (!serviceGeoState.isValidated || serviceGeoState.validatedAddress !== formData.address.trim()) {
                     alert('Validá la direccion y elegí una coincidencia exacta dentro de AMBA antes de guardar.');
                     return;
                 }
-
                 payload = {
                     ...formData,
                     name: formData.name.trim(),
@@ -378,25 +264,7 @@ export default function ConfigPage() {
             const data = await res.json().catch(() => ({}));
 
             if (res.ok) {
-                if (type === 'supervisor' || type === 'service' || type === 'supply') {
-                    refetchCatalog();
-                    if (type === 'service' && isEdit) {
-                        const savedService = data.id ? data : { ...payload, id: editingEntity.data?.id };
-                        setCurrentRoute(currentRoute.map(route => route.service_id === savedService.id ? {
-                            ...route,
-                            service_name: savedService.name,
-                            service_address: savedService.address,
-                            lat: savedService.lat,
-                            lng: savedService.lng
-                        } : route));
-                    }
-                } else if (type === 'user') {
-                    if (isEdit) {
-                        setAppUsers(appUsers.map(u => u.id === editingEntity.data.id ? data : u));
-                    } else {
-                        setAppUsers([...appUsers, data]);
-                    }
-                }
+                refetchCatalog();
                 closeModal();
             } else {
                 if (type === 'service') {
@@ -414,79 +282,18 @@ export default function ConfigPage() {
     };
 
     const handleDelete = async (type, id) => {
-        const label = type === 'supervisor' ? 'supervisor' : type === 'service' ? 'servicio' : type === 'user' ? 'usuario' : 'insumo';
+        const label = type === 'supervisor' ? 'supervisor' : type === 'service' ? 'servicio' : 'insumo';
         if (!confirm(`¿Estás seguro de eliminar este ${label}?`)) return;
-
-        const endpoint = type === 'supervisor' ? `/api/supervisors/${id}` : type === 'service' ? `/api/services/${id}` : type === 'user' ? `/api/app-users/${id}` : `/api/supplies/${id}`;
+        const endpoint = type === 'supervisor' ? `/api/supervisors/${id}` : type === 'service' ? `/api/services/${id}` : `/api/supplies/${id}`;
         try {
             const res = await fetch(endpoint, { method: 'DELETE' });
             if (res.ok) {
-                if (type === 'supervisor' || type === 'service' || type === 'supply') {
-                    refetchCatalog();
-                } else if (type === 'user') {
-                    setAppUsers(appUsers.filter(u => u.id !== id));
-                }
+                refetchCatalog();
             } else {
                 alert('No se pudo eliminar');
             }
         } catch (err) {
             console.error(err);
-        }
-    };
-
-    // Route management functions
-    const addToRoute = (serviceId) => {
-        const service = services.find(s => s.id === parseInt(serviceId));
-        if (!service) return;
-        setCurrentRoute([...currentRoute, {
-            service_id: service.id,
-            service_name: service.name,
-            service_address: service.address,
-            lat: service.lat,
-            lng: service.lng,
-            route_order: currentRoute.length + 1,
-        }]);
-    };
-
-    const removeFromRoute = (index) => {
-        const newRoute = currentRoute.filter((_, i) => i !== index).map((r, i) => ({
-            ...r,
-            route_order: i + 1,
-        }));
-        setCurrentRoute(newRoute);
-    };
-
-    const moveInRoute = (index, direction) => {
-        const newRoute = [...currentRoute];
-        const targetIdx = index + direction;
-        if (targetIdx < 0 || targetIdx >= newRoute.length) return;
-        [newRoute[index], newRoute[targetIdx]] = [newRoute[targetIdx], newRoute[index]];
-        setCurrentRoute(newRoute.map((r, i) => ({ ...r, route_order: i + 1 })));
-    };
-
-    const saveRoute = async () => {
-        if (!selectedSupervisorForRoute) return;
-        setRouteMessage(null);
-        try {
-            const res = await fetch('/api/supervisor-routes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    supervisor_id: parseInt(selectedSupervisorForRoute),
-                    services: currentRoute.map((r, i) => ({
-                        service_id: r.service_id,
-                        route_order: i + 1,
-                    })),
-                }),
-            });
-
-            if (res.ok) {
-                setRouteMessage({ text: 'Recorrido guardado correctamente.', type: 'success' });
-            } else {
-                setRouteMessage({ text: 'Error al guardar el recorrido.', type: 'error' });
-            }
-        } catch (err) {
-            setRouteMessage({ text: 'Error de red.', type: 'error' });
         }
     };
 
@@ -521,108 +328,55 @@ export default function ConfigPage() {
         URL.revokeObjectURL(url);
     };
 
-    const tabs = [
-        { key: 'supervisors', label: 'Supervisores' },
-        { key: 'services', label: 'Servicios' },
-        { key: 'supplies', label: 'Insumos' },
-        { key: 'routes', label: 'Recorridos' },
-    ];
+    const handleSuppliesImport = async (file) => {
+        setSuppliesImportModal({ status: 'loading' });
+        try {
+            const body = new FormData();
+            body.append('file', file);
+            const res = await fetch('/api/supplies/import', { method: 'POST', body });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setSuppliesImportModal({ status: 'done', imported: 0, failedRows: [{ fila: '-', nombre: '-', unidad: '-', motivo: data.error || 'Error desconocido' }] });
+                return;
+            }
+            setSuppliesImportModal({ status: 'done', imported: data.imported, failedRows: data.failedRows || [] });
+            if (data.imported > 0) refetchCatalog();
+        } catch (err) {
+            setSuppliesImportModal({ status: 'done', imported: 0, failedRows: [{ fila: '-', nombre: '-', unidad: '-', motivo: err.message || 'Error de red' }] });
+        }
+    };
+
+    const handleSuppliesExport = () => {
+        const header = ['insumo', 'proveedor'];
+        const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [header.join(','), ...supplies.map(s => [escape(s.nombre), escape(s.proveedor)].join(','))];
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'insumos.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     const filteredServices = useMemo(() => {
         const normalizedSearch = getSearchableText(serviceSearchTerm);
-
         if (!normalizedSearch) return services;
-
         return services.filter(service => {
             const haystack = getSearchableText(`${service.name} ${service.address}`);
             return haystack.includes(normalizedSearch);
         });
     }, [serviceSearchTerm, services]);
 
-    const filteredAvailableServices = useMemo(() => {
-        const normalizedSearch = getSearchableText(routeServiceSearchTerm);
-
-        if (!normalizedSearch) return availableServices;
-
-        return availableServices.filter(service => {
-            const haystack = getSearchableText(`${service.name} ${service.address}`);
-            return haystack.includes(normalizedSearch);
-        });
-    }, [availableServices, routeServiceSearchTerm]);
-
     return (
         <MainLayout>
+            <Suspense fallback={null}>
+                <TabReader onTab={setConfigTab} />
+            </Suspense>
             <div className="config-view">
-                <header className="page-header" style={{ marginBottom: '2rem' }}>
-                    <div>
-                        <h1>Configuración del Sistema</h1>
-                        <p style={{ color: 'var(--text-muted)' }}>Gestión de recursos y acceso</p>
-                    </div>
-                    <div className="tabs tabs-scroll segmented-shell">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.key}
-                                className={`btn ${configTab === tab.key ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setConfigTab(tab.key)}
-                                style={{ boxShadow: configTab === tab.key ? '' : 'none' }}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
-                </header>
 
-                {/* ============ USUARIOS ============ */}
-                {configTab === 'users' ? (
-                    <div className="card" style={{ padding: 0 }}>
-                        <div className="page-header" style={{ padding: '1.5rem' }}>
-                            <h3>Usuarios del Sistema</h3>
-                            <button className="btn btn-primary" onClick={() => openModal('user')}>+ Crear Usuario</button>
-                        </div>
-                        <div className="table-container">
-                            <table className="table mobile-cards-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nombre completo</th>
-                                        <th>Usuario (DNI)</th>
-                                        <th>Rol</th>
-                                        <th>Acceso</th>
-                                        <th style={{ textAlign: 'right' }}>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {appUsers.map(u => (
-                                        <tr key={u.id}>
-                                            <td data-label="Nombre completo"><strong>{u.surname}, {u.name}</strong></td>
-                                            <td data-label="Usuario (DNI)">
-                                                <strong>{u.username}</strong>
-                                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Usuario de inicio de sesión</div>
-                                            </td>
-                                            <td data-label="Rol">
-                                                <span className="badge badge-info">
-                                                    {u.role === 'admin' ? 'Administrador' : u.role === 'purchases' ? 'Compras' : 'Supervisor'}
-                                                </span>
-                                            </td>
-                                            <td data-label="Acceso">
-                                                <span className={`badge ${u.login_enabled ? 'badge-success' : 'badge-danger'}`}>
-                                                    {u.login_enabled ? 'Habilitado' : 'Bloqueado'}
-                                                </span>
-                                            </td>
-                                            <td data-label="Acciones" className="mobile-hide-label" style={{ textAlign: 'right' }}>
-                                                <div className="table-action-group">
-                                                    <button className="btn btn-secondary" onClick={() => openModal('user', u)}>✏️</button>
-                                                    <button className="btn btn-secondary" style={{ color: 'var(--error)' }} onClick={() => handleDelete('user', u.id)}>🗑️</button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    /* ============ SUPERVISORES ============ */
-                ) : configTab === 'supervisors' ? (
+                {/* ============ SUPERVISORES ============ */}
+                {configTab === 'supervisors' && (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="page-header" style={{ padding: '1.5rem' }}>
                             <h3>Lista de Supervisores</h3>
@@ -669,9 +423,10 @@ export default function ConfigPage() {
                             </table>
                         </div>
                     </div>
+                )}
 
-                    /* ============ SERVICIOS ============ */
-                ) : configTab === 'services' ? (
+                {/* ============ SERVICIOS ============ */}
+                {configTab === 'services' && (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="page-header" style={{ padding: '1.5rem', flexWrap: 'wrap' }}>
                             <h3>Lista de Servicios</h3>
@@ -720,7 +475,7 @@ export default function ConfigPage() {
                                     ))}
                                     {filteredServices.length === 0 && (
                                         <tr>
-                                            <td data-label="" colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+                                            <td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
                                                 {serviceSearchTerm ? 'No se encontraron servicios con esa busqueda.' : 'No hay servicios cargados todavia.'}
                                             </td>
                                         </tr>
@@ -729,13 +484,18 @@ export default function ConfigPage() {
                             </table>
                         </div>
                     </div>
+                )}
 
-                    /* ============ INSUMOS ============ */
-                ) : configTab === 'supplies' ? (
+                {/* ============ INSUMOS ============ */}
+                {configTab === 'supplies' && (
                     <div className="card" style={{ padding: 0 }}>
                         <div className="page-header" style={{ padding: '1.5rem' }}>
                             <h3>Lista Fija de Insumos</h3>
-                            <button className="btn btn-primary" onClick={() => openModal('supply')}>+ Añadir Insumo</button>
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <button className="btn btn-secondary" onClick={handleSuppliesExport}>Exportar</button>
+                                <button className="btn btn-secondary" onClick={() => setSuppliesImportModal({ status: 'idle' })}>Importar Excel</button>
+                                <button className="btn btn-primary" onClick={() => openModal('supply')}>+ Añadir Insumo</button>
+                            </div>
                         </div>
                         <div className="table-container">
                             <table className="table mobile-cards-table">
@@ -743,6 +503,7 @@ export default function ConfigPage() {
                                     <tr>
                                         <th>Insumo</th>
                                         <th>Unidad de Medida</th>
+                                        <th>Proveedor</th>
                                         <th>Estado</th>
                                         <th style={{ textAlign: 'right' }}>Acciones</th>
                                     </tr>
@@ -752,6 +513,7 @@ export default function ConfigPage() {
                                         <tr key={s.id}>
                                             <td data-label="Insumo"><strong>{s.nombre}</strong></td>
                                             <td data-label="Unidad de Medida">{s.unidad}</td>
+                                            <td data-label="Proveedor">{s.proveedor || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                                             <td data-label="Estado">
                                                 <span className={`badge ${s.activo ? 'badge-success' : 'badge-danger'}`}>
                                                     {s.activo ? 'Activo' : 'Inactivo'}
@@ -769,177 +531,66 @@ export default function ConfigPage() {
                             </table>
                         </div>
                     </div>
+                )}
 
-                    /* ============ RECORRIDOS ============ */
-                ) : configTab === 'routes' ? (
-                    <div>
-                        <div className="card">
-                            <h3 style={{ marginBottom: '1.5rem' }}>📋 Asignar Recorrido a Supervisor</h3>
-                            <div className="form-group">
-                                <label>Seleccionar Supervisor:</label>
-                                <select
-                                    value={selectedSupervisorForRoute}
-                                    onChange={(e) => setSelectedSupervisorForRoute(e.target.value)}
-                                    style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
-                                >
-                                    <option value="">-- Elegí un supervisor --</option>
-                                    {supervisors.map(s => (
-                                        <option key={s.id} value={s.id}>{s.surname}, {s.name} (DNI: {s.dni})</option>
-                                    ))}
-                                </select>
+                {/* ============ MODAL IMPORTAR INSUMOS ============ */}
+                {suppliesImportModal && (
+                    <div className="modal-overlay">
+                        <div className="modal-content">
+                            <h2>Importar Insumos desde Excel</h2>
+                            {suppliesImportModal.status === 'idle' && (
+                                <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-muted-surface)', fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+                                        El archivo debe tener las columnas: <strong style={{ color: 'var(--text-main)' }}>nombre</strong>, <strong style={{ color: 'var(--text-main)' }}>unidad</strong> (obligatorias), y opcionalmente <strong style={{ color: 'var(--text-main)' }}>activo</strong> (true/false). Si no se indica, se importa como activo.
+                                    </div>
+                                    <a href="/api/supplies/import" download style={{ alignSelf: 'flex-start' }} className="btn btn-secondary">Descargar plantilla</a>
+                                    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 600 }}>
+                                        Seleccionar archivo .xlsx o .csv
+                                        <input
+                                            type="file"
+                                            accept=".xlsx,.csv"
+                                            style={{ fontWeight: 'normal' }}
+                                            onChange={(e) => {
+                                                const f = e.target.files?.[0];
+                                                if (f) handleSuppliesImport(f);
+                                            }}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            {suppliesImportModal.status === 'loading' && (
+                                <div style={{ marginTop: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                                    Procesando archivo...
+                                </div>
+                            )}
+                            {suppliesImportModal.status === 'done' && (
+                                <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                    <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: '#DCFCE7', color: '#166534', fontWeight: 600 }}>
+                                        {suppliesImportModal.imported} insumo{suppliesImportModal.imported !== 1 ? 's' : ''} importado{suppliesImportModal.imported !== 1 ? 's' : ''} correctamente.
+                                    </div>
+                                    {suppliesImportModal.failedRows?.length > 0 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            <p style={{ fontWeight: 600, margin: 0, color: 'var(--error)' }}>{suppliesImportModal.failedRows.length} fila{suppliesImportModal.failedRows.length !== 1 ? 's' : ''} no importada{suppliesImportModal.failedRows.length !== 1 ? 's' : ''}:</p>
+                                            <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                {suppliesImportModal.failedRows.map((e, i) => (
+                                                    <div key={i} style={{ padding: '0.6rem 0.9rem', borderRadius: 'var(--radius-sm)', background: '#FEE2E2', color: '#991B1B', fontSize: '0.85rem' }}>
+                                                        <strong>Fila {e.fila} — {e.nombre}:</strong> {e.motivo}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <button className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={() => setSuppliesImportModal({ status: 'idle' })}>Importar otro archivo</button>
+                                </div>
+                            )}
+                            <div className="config-modal-actions" style={{ marginTop: '2rem' }}>
+                                <button className="btn btn-secondary" onClick={() => setSuppliesImportModal(null)} disabled={suppliesImportModal.status === 'loading'}>Cerrar</button>
                             </div>
                         </div>
-
-                        {selectedSupervisorForRoute && (
-                            <>
-                                {/* Current Route */}
-                                <div className="card">
-                                    <div className="page-header" style={{ marginBottom: '1rem' }}>
-                                        <h3>🗺️ Recorrido Actual</h3>
-                                        <button
-                                            className="btn btn-primary"
-                                            onClick={saveRoute}
-                                            style={{ gap: '0.4rem' }}
-                                        >
-                                            💾 Guardar Recorrido
-                                        </button>
-                                    </div>
-
-                                    {routeMessage && (
-                                        <div style={{
-                                            padding: '0.75rem',
-                                            borderRadius: 'var(--radius-sm)',
-                                            marginBottom: '1rem',
-                                            background: routeMessage.type === 'success' ? '#DCFCE7' : '#FEE2E2',
-                                            color: routeMessage.type === 'success' ? '#166534' : '#991B1B',
-                                            fontWeight: 500,
-                                            textAlign: 'center',
-                                        }}>
-                                            {routeMessage.text}
-                                        </div>
-                                    )}
-
-                                    {currentRoute.length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                                            <p>No hay servicios asignados. Agregá servicios desde la lista de abajo.</p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            {currentRoute.map((r, idx) => (
-                                                <div key={`${r.service_id}-${idx}`} className="route-item" style={{
-                                                    padding: '0.85rem 1rem',
-                                                    background: idx % 2 === 0 ? 'var(--color-muted-surface)' : 'var(--color-surface)',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    marginBottom: '0.35rem',
-                                                    border: '1px solid var(--border-color)',
-                                                }}>
-                                                    <div style={{
-                                                        width: '32px',
-                                                        height: '32px',
-                                                        borderRadius: '50%',
-                                                        background: 'var(--color-primary)',
-                                                        color: '#fff',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        fontWeight: 700,
-                                                        fontSize: '0.85rem',
-                                                        flexShrink: 0,
-                                                    }}>
-                                                        {idx + 1}
-                                                    </div>
-                                                    <div className="route-item-main">
-                                                        <strong>{r.service_name}</strong>
-                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                            {r.service_address || 'Sin dirección'}
-                                                            {r.lat && r.lng && (
-                                                                <span> • GPS: {Number(r.lat).toFixed(4)}, {Number(r.lng).toFixed(4)}</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div className="route-item-actions" style={{ gap: '0.25rem' }}>
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-                                                            onClick={() => moveInRoute(idx, -1)}
-                                                            disabled={idx === 0}
-                                                            title="Subir"
-                                                        >
-                                                            ⬆️
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem' }}
-                                                            onClick={() => moveInRoute(idx, 1)}
-                                                            disabled={idx === currentRoute.length - 1}
-                                                            title="Bajar"
-                                                        >
-                                                            ⬇️
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-secondary"
-                                                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.8rem', color: 'var(--error)' }}
-                                                            onClick={() => removeFromRoute(idx)}
-                                                            title="Quitar"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Available Services */}
-                                <div className="card">
-                                    <div className="flex-between" style={{ gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                                        <h3 style={{ margin: 0 }}>➕ Agregar Servicio al Recorrido</h3>
-                                        <input
-                                            type="text"
-                                            placeholder="Buscar servicio o direccion..."
-                                            value={routeServiceSearchTerm}
-                                            onChange={(e) => setRouteServiceSearchTerm(e.target.value)}
-                                            className="card"
-                                            style={{ margin: 0, width: 'min(360px, 100%)' }}
-                                        />
-                                    </div>
-                                    {availableServices.length === 0 ? (
-                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                                            Todos los servicios ya están en el recorrido.
-                                        </p>
-                                    ) : filteredAvailableServices.length === 0 ? (
-                                        <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                                            No hay servicios que coincidan con la búsqueda.
-                                        </p>
-                                    ) : (
-                                        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
-                                            {filteredAvailableServices.map(s => (
-                                                <div key={s.id} className="service-option-card">
-                                                    <div>
-                                                        <strong>{s.name}</strong>
-                                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                            {s.address || 'Sin dirección'}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        className="btn btn-primary"
-                                                        style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                                                        onClick={() => addToRoute(s.id)}
-                                                    >
-                                                        + Agregar
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </>
-                        )}
                     </div>
-                ) : null}
+                )}
 
-                {/* ============ MODAL ============ */}
+                {/* ============ MODAL IMPORTAR SERVICIOS ============ */}
                 {importModal && (
                     <div className="modal-overlay">
                         <div className="modal-content">
@@ -999,10 +650,11 @@ export default function ConfigPage() {
                     </div>
                 )}
 
+                {/* ============ MODAL EDITAR/CREAR ============ */}
                 {editingEntity && (
                     <div className="modal-overlay">
                         <div className="modal-content">
-                            <h2>{editingEntity.data ? 'Editar' : 'Crear'} {editingEntity.type === 'supervisor' ? 'Supervisor' : editingEntity.type === 'service' ? 'Servicio' : editingEntity.type === 'user' ? 'Usuario' : 'Insumo'}</h2>
+                            <h2>{editingEntity.data ? 'Editar' : 'Crear'} {editingEntity.type === 'supervisor' ? 'Supervisor' : editingEntity.type === 'service' ? 'Servicio' : 'Insumo'}</h2>
                             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                 {editingEntity.type === 'supervisor' ? (
                                     <>
@@ -1043,53 +695,6 @@ export default function ConfigPage() {
                                                 : 'La contraseña inicial debe tener al menos 6 caracteres.'}
                                         </div>
                                     </>
-                                ) : editingEntity.type === 'user' ? (
-                                    <>
-                                        <div style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-muted-surface)', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                                            El DNI será el nombre de usuario para iniciar sesión.
-                                        </div>
-                                        <input
-                                            type="text" placeholder="Nombre" className="card" style={{ margin: 0 }}
-                                            value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                        />
-                                        <input
-                                            type="text" placeholder="Apellido" className="card" style={{ margin: 0 }}
-                                            value={formData.surname || ''} onChange={e => setFormData({ ...formData, surname: e.target.value })}
-                                        />
-                                        <input
-                                            type="text" placeholder="DNI (usuario de login)" className="card" style={{ margin: 0 }}
-                                            value={formData.username || ''} onChange={e => setFormData({ ...formData, username: e.target.value })}
-                                        />
-                                        <select
-                                            className="card"
-                                            style={{ margin: 0, padding: '0.75rem' }}
-                                            value={formData.role || 'supervisor'}
-                                            onChange={e => setFormData({ ...formData, role: e.target.value })}
-                                        >
-                                            <option value="supervisor">Supervisor</option>
-                                            <option value="admin">Administrador</option>
-                                            <option value="purchases">Compras</option>
-                                        </select>
-                                        <div className="supervisor-toggle-row" style={{ padding: '0.9rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: 'var(--color-surface)' }}>
-                                            <div>
-                                                <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>Acceso habilitado</div>
-                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Si lo desactivás, el usuario no podrá iniciar sesión.</div>
-                                            </div>
-                                            <input
-                                                type="checkbox"
-                                                checked={formData.login_enabled !== false}
-                                                onChange={e => setFormData({ ...formData, login_enabled: e.target.checked })}
-                                                style={{ width: 'auto', margin: 0, transform: 'scale(1.2)' }}
-                                            />
-                                        </div>
-                                        <PasswordInput placeholder={editingEntity.data ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'} value={formData.password || ''} onChange={e => setFormData({ ...formData, password: e.target.value })} show={showModalPassword} onToggle={() => setShowModalPassword(v => !v)} />
-                                        <PasswordInput placeholder={editingEntity.data ? 'Confirmar nueva contraseña' : 'Confirmar contraseña'} value={formData.confirmPassword || ''} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} show={showModalConfirmPassword} onToggle={() => setShowModalConfirmPassword(v => !v)} />
-                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                                            {editingEntity.data
-                                                ? 'Dejá la contraseña vacía si querés mantener la actual.'
-                                                : 'La contraseña inicial debe tener al menos 6 caracteres.'}
-                                        </div>
-                                    </>
                                 ) : editingEntity.type === 'service' ? (
                                     <>
                                         <input
@@ -1111,21 +716,14 @@ export default function ConfigPage() {
                                                 {formData.lat && formData.lng ? `GPS: ${Number(formData.lat).toFixed(6)}, ${Number(formData.lng).toFixed(6)}` : 'GPS pendiente de validar'}
                                             </div>
                                         </div>
-                                        {serviceCandidates.length > 0 ? (
+                                        {serviceCandidates.length > 0 && (
                                             <div style={{ display: 'grid', gap: '0.75rem' }}>
                                                 {serviceCandidates.map(candidate => (
                                                     <button
                                                         key={candidate.id}
                                                         type="button"
                                                         onClick={() => handleSelectServiceCandidate(candidate)}
-                                                        style={{
-                                                            border: '1px solid var(--border-color)',
-                                                            borderRadius: 'var(--radius-md)',
-                                                            background: 'var(--color-surface)',
-                                                            padding: '1rem',
-                                                            textAlign: 'left',
-                                                            cursor: 'pointer',
-                                                        }}
+                                                        style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', padding: '1rem', textAlign: 'left', cursor: 'pointer' }}
                                                     >
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                                                             <strong style={{ color: 'var(--text-main)' }}>{candidate.address}</strong>
@@ -1137,8 +735,8 @@ export default function ConfigPage() {
                                                     </button>
                                                 ))}
                                             </div>
-                                        ) : null}
-                                        {serviceGeoState.text ? (
+                                        )}
+                                        {serviceGeoState.text && (
                                             <div style={{
                                                 padding: '0.85rem 1rem',
                                                 borderRadius: 'var(--radius-sm)',
@@ -1149,7 +747,7 @@ export default function ConfigPage() {
                                             }}>
                                                 {serviceGeoState.text}
                                             </div>
-                                        ) : null}
+                                        )}
                                     </>
                                 ) : editingEntity.type === 'supply' ? (
                                     <>
@@ -1160,6 +758,10 @@ export default function ConfigPage() {
                                         <input
                                             type="text" placeholder="Unidad (ej: litros, unidades)" className="card" style={{ margin: 0 }}
                                             value={formData.unidad || ''} onChange={e => setFormData({ ...formData, unidad: e.target.value })}
+                                        />
+                                        <input
+                                            type="text" placeholder="Proveedor (opcional)" className="card" style={{ margin: 0 }}
+                                            value={formData.proveedor || ''} onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
                                         />
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
                                             <input

@@ -10,6 +10,44 @@ export default function SupervisoresPage() {
     const [todayLogs, setTodayLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [downloadingSupervisorId, setDownloadingSupervisorId] = useState(null);
+    const [downloadingExcelId, setDownloadingExcelId] = useState(null);
+
+    const handleDownloadWeeklyExcel = async (supervisor) => {
+        const { default: Swal } = await import('sweetalert2');
+        try {
+            setDownloadingExcelId(supervisor.id);
+            const response = await fetch(`/api/reports/weekly-excel?supervisor_id=${supervisor.id}`);
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error || `Error del servidor (${response.status})`);
+            }
+
+            const blob = await response.blob();
+            const filename = response.headers.get('content-disposition')?.match(/filename="?([^"]+)"?/)?.[1]
+                ?? `Reporte_Semanal_${supervisor.surname}_${supervisor.name}.xlsx`;
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (error) {
+            console.error('Error descargando reporte semanal:', error);
+            await Swal.fire({
+                title: 'Error',
+                text: error.message || 'No se pudo descargar el reporte.',
+                icon: 'error',
+                confirmButtonColor: '#ef4444',
+            });
+        } finally {
+            setDownloadingExcelId(null);
+        }
+    };
 
     const handleDownloadPresentismo = async (supervisor) => {
         const { default: Swal } = await import('sweetalert2');
@@ -114,7 +152,7 @@ export default function SupervisoresPage() {
                                     <tr>
                                         <th>Nombre Completo</th>
                                         <th>DNI</th>
-                                        <th style={{ textAlign: 'right' }}>Presentismo 7 días</th>
+                                        <th style={{ textAlign: 'right' }}>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -122,16 +160,27 @@ export default function SupervisoresPage() {
                                         <tr key={sup.id}>
                                             <td data-label="Nombre Completo"><strong>{sup.surname}, {sup.name}</strong></td>
                                             <td data-label="DNI">{sup.dni}</td>
-                                            <td data-label="Presentismo 7 días" className="mobile-hide-label" style={{ textAlign: 'right' }}>
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-secondary"
-                                                    onClick={() => handleDownloadPresentismo(sup)}
-                                                    disabled={!sup.id || downloadingSupervisorId === sup.id}
-                                                >
-                                                    <span className="desktop-only">{sup.id && downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
-                                                    <span className="mobile-only">{sup.id && downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
-                                                </button>
+                                            <td data-label="Acciones" className="mobile-hide-label" style={{ textAlign: 'right' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary"
+                                                        onClick={() => handleDownloadWeeklyExcel(sup)}
+                                                        disabled={!sup.id || downloadingExcelId === sup.id}
+                                                    >
+                                                        <span className="desktop-only">{sup.id && downloadingExcelId === sup.id ? 'Descargando...' : 'Reporte Semanal'}</span>
+                                                        <span className="mobile-only">{sup.id && downloadingExcelId === sup.id ? '...' : '📊'}</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary"
+                                                        onClick={() => handleDownloadPresentismo(sup)}
+                                                        disabled={!sup.id || downloadingSupervisorId === sup.id}
+                                                    >
+                                                        <span className="desktop-only">{sup.id && downloadingSupervisorId === sup.id ? 'Descargando...' : 'Descargar PDF'}</span>
+                                                        <span className="mobile-only">{sup.id && downloadingSupervisorId === sup.id ? '...' : '📄'}</span>
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

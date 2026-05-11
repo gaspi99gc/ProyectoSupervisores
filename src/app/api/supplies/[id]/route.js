@@ -3,7 +3,7 @@ import { supabase } from '@/lib/db';
 export async function PUT(req, { params }) {
     try {
         const { id } = await params;
-        const { nombre, unidad, activo } = await req.json();
+        const { nombre, unidad, activo, proveedor } = await req.json();
 
         if (!nombre?.trim()) {
             return Response.json({ error: 'El nombre es obligatorio' }, { status: 400 });
@@ -11,7 +11,7 @@ export async function PUT(req, { params }) {
 
         const { error } = await supabase
             .from('supplies')
-            .update({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false })
+            .update({ nombre: nombre.trim(), unidad: unidad || 'unidades', activo: activo !== false, proveedor: proveedor?.trim() || null })
             .eq('id', id);
 
         if (error) throw error;

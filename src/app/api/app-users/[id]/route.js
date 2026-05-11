@@ -3,14 +3,15 @@ import { supabase } from '@/lib/db';
 export async function PUT(req, { params }) {
     try {
         const { id } = await params;
-        const { password, name, surname, role, login_enabled } = await req.json();
+        const { password, name, surname, username, role, login_enabled } = await req.json();
         const normalizedName = name?.trim();
         const normalizedSurname = surname?.trim();
+        const normalizedUsername = username?.toString().trim().toLowerCase();
         const normalizedRole = role?.toLowerCase().trim();
         const normalizedPassword = password?.toString() || '';
 
-        if (!normalizedName || !normalizedSurname || !normalizedRole) {
-            return Response.json({ error: 'Nombre, apellido y rol son obligatorios' }, { status: 400 });
+        if (!normalizedName || !normalizedSurname || !normalizedUsername || !normalizedRole) {
+            return Response.json({ error: 'Nombre, apellido, usuario y rol son obligatorios' }, { status: 400 });
         }
         if (normalizedPassword && normalizedPassword.length < 6) {
             return Response.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 });
@@ -29,10 +30,10 @@ export async function PUT(req, { params }) {
             return Response.json({ error: 'Usuario no encontrado' }, { status: 404 });
         }
 
-        if (normalizedPassword) {
-            const { error: pwError } = await supabase.auth.admin.updateUserById(id, { password: normalizedPassword });
-            if (pwError) throw pwError;
-        }
+        const authUpdate = { email: `${normalizedUsername}@lasia.com.ar` };
+        if (normalizedPassword) authUpdate.password = normalizedPassword;
+        const { error: authError } = await supabase.auth.admin.updateUserById(id, authUpdate);
+        if (authError) throw authError;
 
         // Handle supervisor table sync
         if (normalizedRole === 'supervisor' && current.role !== 'supervisor') {
@@ -48,6 +49,7 @@ export async function PUT(req, { params }) {
             .update({
                 name: normalizedName,
                 surname: normalizedSurname,
+                username: normalizedUsername,
                 role: normalizedRole,
                 login_enabled: login_enabled !== false,
             })
