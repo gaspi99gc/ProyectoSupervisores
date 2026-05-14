@@ -23,6 +23,18 @@ async function fetchEmployeeWithJoins(id) {
     };
 }
 
+export async function DELETE(req, { params }) {
+    try {
+        const { id } = await params;
+        const { error } = await supabase.from('employees').delete().eq('id', id);
+        if (error) throw error;
+        return Response.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting employee:', error);
+        return Response.json({ error: error?.message || 'Failed to delete employee' }, { status: 500 });
+    }
+}
+
 export async function PUT(req, { params }) {
     try {
         const { id } = await params;
@@ -58,6 +70,7 @@ export async function PUT(req, { params }) {
         if ('estado_empleado' in data) updateData.estado_empleado = data.estado_empleado;
         if ('fecha_baja' in data) updateData.fecha_baja = data.fecha_baja || null;
         if ('motivo_baja' in data) updateData.motivo_baja = data.motivo_baja || null;
+        if ('observaciones_baja' in data) updateData.observaciones_baja = data.observaciones_baja || null;
 
         if (Object.keys(updateData).length === 0) {
             return Response.json({ error: 'No fields to update' }, { status: 400 });
