@@ -122,7 +122,8 @@ h6 {
   color: var(--color-sidebar-text);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  height: 100vh;
+  overflow: hidden;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
   z-index: 10;
 }
@@ -151,6 +152,7 @@ h6 {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  overflow-y: auto;
 }
 
 .sidebar-footer-row {
@@ -874,10 +876,11 @@ label {
 }
 
 .supervisor-home-view {
-  min-height: calc(100vh - 8rem);
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .supervisor-home-panel {
@@ -1140,8 +1143,8 @@ label {
   }
 
   .main-container {
-    height: auto;
-    min-height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
   }
 
   .sidebar-logo {

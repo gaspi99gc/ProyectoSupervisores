@@ -436,14 +436,32 @@ export default function ConfigPage() {
                             </div>
                         </div>
                         <div style={{ padding: '0 1.5rem 1rem' }}>
-                            <input
-                                type="text"
-                                placeholder="Buscar por nombre o direccion..."
-                                value={serviceSearchTerm}
-                                onChange={(e) => setServiceSearchTerm(e.target.value)}
-                                className="card"
-                                style={{ margin: 0, width: '100%' }}
-                            />
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nombre o direccion..."
+                                    value={serviceSearchTerm}
+                                    onChange={(e) => setServiceSearchTerm(e.target.value)}
+                                    className="card"
+                                    style={{ margin: 0, width: '100%', paddingRight: serviceSearchTerm ? '2.2rem' : undefined }}
+                                />
+                                {serviceSearchTerm && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setServiceSearchTerm('')}
+                                        style={{
+                                            position: 'absolute', right: '0.75rem', top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none', border: 'none', cursor: 'pointer',
+                                            color: 'var(--text-muted)', fontSize: '1.1rem',
+                                            lineHeight: 1, padding: '0.1rem 0.2rem',
+                                            display: 'flex', alignItems: 'center',
+                                        }}
+                                        tabIndex={-1}
+                                        aria-label="Limpiar búsqueda"
+                                    >×</button>
+                                )}
+                            </div>
                         </div>
                         <div className="table-container">
                             <table className="table mobile-cards-table">
