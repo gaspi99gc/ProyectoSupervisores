@@ -57,7 +57,7 @@ function getDistanceInMeters(lat1, lng1, lat2, lng2) {
 export default function SupervisorHomePage() {
     const [currentUser, setCurrentUser] = useState(null);
     const { services } = useCatalog();
-    const { sortedServices, userLocation, locationLoading } = useNearbyServices(services);
+    const { sortedServices, userLocation, locationLoading, locationPermission, retryLocation } = useNearbyServices(services);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [searchText, setSearchText] = useState('');
     const [showResults, setShowResults] = useState(false);
@@ -82,10 +82,13 @@ export default function SupervisorHomePage() {
 
         if (!pool.length) return [];
 
+        if (!userLocation) {
+            return pool.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        }
+
         const [nearest, ...rest] = pool;
-        const alphabetical = [...rest].sort((a, b) => a.name.localeCompare(b.name, 'es'));
-        return [{ ...nearest, _recommended: true }, ...alphabetical];
-    }, [searchText, selectedServiceId, sortedServices]);
+        return [{ ...nearest, _recommended: true }, ...rest];
+    }, [searchText, selectedServiceId, sortedServices, userLocation]);
 
     // Sync search text when initial status loads (supervisor already checked in)
     useEffect(() => {
@@ -285,6 +288,63 @@ export default function SupervisorHomePage() {
                 <div className="supervisor-home-panel">
                     <div className="form-group supervisor-home-service-group">
                         <label>Ubicacion</label>
+                        {locationLoading && !userLocation && (
+                            <div style={{
+                                marginBottom: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                color: '#0369a1',
+                                fontSize: '0.85rem',
+                            }}>
+                                Obteniendo ubicación...
+                            </div>
+                        )}
+                        {!locationLoading && !userLocation && locationPermission === 'denied' && (
+                            <div style={{
+                                marginBottom: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: '#fef9c3',
+                                border: '1px solid #fde047',
+                                color: '#854d0e',
+                                fontSize: '0.85rem',
+                            }}>
+                                📍 GPS bloqueado. Para activarlo, tocá el candado o el ícono de ubicación en la barra de tu navegador y permitir el acceso.
+                            </div>
+                        )}
+                        {!locationLoading && !userLocation && locationPermission === 'prompt' && (
+                            <div style={{
+                                marginBottom: '0.5rem',
+                                padding: '0.75rem',
+                                borderRadius: 'var(--radius-md)',
+                                background: '#f0f9ff',
+                                border: '1px solid #bae6fd',
+                                color: '#0369a1',
+                                fontSize: '0.85rem',
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>📍 Necesitamos tu ubicación</div>
+                                <div style={{ marginBottom: '0.75rem' }}>Activá el GPS para que el sistema te muestre el servicio más cercano automáticamente.</div>
+                                <button
+                                    type="button"
+                                    onClick={retryLocation}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem',
+                                        borderRadius: 'var(--radius-md)',
+                                        border: 'none',
+                                        background: '#0369a1',
+                                        color: '#fff',
+                                        fontSize: '0.9rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    Activar GPS
+                                </button>
+                            </div>
+                        )}
                         <div style={{ position: 'relative' }}>
                             <input
                                 ref={inputRef}

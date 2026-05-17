@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 function getDistanceInMeters(lat1, lng1, lat2, lng2) {
     const R = 6371e3;
@@ -21,20 +21,63 @@ export function formatDistance(meters) {
 export function useNearbyServices(services) {
     const [userLocation, setUserLocation] = useState(null);
     const [locationLoading, setLocationLoading] = useState(true);
+    const [locationPermission, setLocationPermission] = useState('prompt'); // 'prompt' | 'granted' | 'denied'
+
+    const watchIdRef = useRef(null);
+
+    const startWatching = () => {
+        if (typeof window === 'undefined' || !navigator.geolocation) {
+            setLocationLoading(false);
+            setLocationPermission('denied');
+            return;
+        }
+        if (watchIdRef.current !== null) {
+            navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+        setLocationLoading(true);
+        watchIdRef.current = navigator.geolocation.watchPosition(
+            pos => {
+                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                setLocationPermission('granted');
+                setLocationLoading(false);
+            },
+            () => {
+                setLocationPermission('denied');
+                setLocationLoading(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    };
+
+    const requestLocation = startWatching;
 
     useEffect(() => {
-        if (typeof window === 'undefined' || !navigator.geolocation) {
+        if (typeof window === 'undefined') {
             setLocationLoading(false);
             return;
         }
-        navigator.geolocation.getCurrentPosition(
-            pos => {
-                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        if (!navigator.permissions) {
+            setLocationLoading(false);
+            return;
+        }
+        navigator.permissions.query({ name: 'geolocation' }).then(result => {
+            setLocationPermission(result.state);
+            if (result.state === 'granted') {
+                startWatching();
+            } else {
                 setLocationLoading(false);
-            },
-            () => setLocationLoading(false),
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-        );
+            }
+            result.onchange = () => {
+                setLocationPermission(result.state);
+                if (result.state === 'granted') startWatching();
+            };
+        });
+
+        return () => {
+            if (watchIdRef.current !== null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+            }
+        };
     }, []);
 
     const sortedServices = useMemo(() => {
@@ -49,5 +92,5 @@ export function useNearbyServices(services) {
             .sort((a, b) => a._distance - b._distance);
     }, [services, userLocation]);
 
-    return { sortedServices, userLocation, locationLoading };
+    return { sortedServices, userLocation, locationLoading, locationPermission, retryLocation: requestLocation };
 }
