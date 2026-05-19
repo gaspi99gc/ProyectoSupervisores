@@ -14,6 +14,8 @@ const LICENSE_CONFIG = {
     sin_goce:     { label: 'Sin goce',     color: '#64748B' },
     estudio:      { label: 'Estudio',      color: '#10B981' },
     suspension:   { label: 'Suspensión',   color: '#EF4444' },
+    casamiento:   { label: 'Casamiento',   color: '#EC4899' },
+    fallecimiento:{ label: 'Fallecimiento familiar', color: '#334155' },
 };
 
 function getLicenseState(endDateStr, today) {
@@ -102,10 +104,18 @@ export default function LicensesGantt({ employees }) {
     const [viewingLicense, setViewingLicense] = useState(null);
     const [periodOffset, setPeriodOffset] = useState(0);
 
-    const employeeOptions = useMemo(() =>
-        [...employees].sort((a, b) => a.apellido.localeCompare(b.apellido))
-            .map(e => ({ value: String(e.id), label: `${e.apellido}, ${e.nombre}` }))
-    , [employees]);
+    const optionsFromLicenses = (list) => {
+        const map = new Map();
+        list.forEach(l => {
+            if (!map.has(l.employee_id)) {
+                map.set(l.employee_id, { value: String(l.employee_id), label: `${l.apellido}, ${l.nombre}` });
+            }
+        });
+        return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    };
+
+    const activeEmployeeOptions = useMemo(() => optionsFromLicenses(licenses), [licenses]);
+    const finEmployeeOptions = useMemo(() => optionsFromLicenses(finLicenses), [finLicenses]);
 
     const today = useMemo(() => {
         const d = new Date();
@@ -188,22 +198,6 @@ export default function LicensesGantt({ employees }) {
         const td = lA.localeCompare(lB, 'es');
         if (td !== 0) return td;
         return `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`, 'es');
-    };
-
-    const exportActivasExcel = async () => {
-        const XLSX = await import('xlsx');
-        const rows = [...licenses].sort(sortByTypeThenName).map(l => ({
-            'Nombre y Apellido': `${l.apellido}, ${l.nombre}`,
-            'Tipo': LICENSE_CONFIG[l.type]?.label || l.type,
-            'Fecha Inicio': toAR(l.start_date),
-            'Fecha Fin': toAR(l.end_date),
-            'Observaciones': l.notes || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{ wch: 30 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 40 }];
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Licencias Activas');
-        XLSX.writeFile(wb, `licencias_activas_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
     const exportActivasPDF = async () => {
@@ -412,7 +406,7 @@ export default function LicensesGantt({ employees }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
                 <StatCard icon="📋" value={stats.total}       label="Licencias activas"   sub="Período actual"         color="#3b82f6" />
                 <StatCard icon="🦺" value={stats.art}         label="Licencias ART"       sub="Activas actualmente"    color="#f97316" />
-                <StatCard icon="🔄" value={stats.reintegros}  label="Reintegros esta sem." sub="Lunes a domingo"       color="#22c55e" />
+                <StatCard icon="🔄" value={stats.reintegros}  label="Reingresos esta sem." sub="Lunes a domingo"       color="#22c55e" />
                 <StatCard icon="📆" value={stats.prolongadas} label="Licencias prolongadas" sub="Más de 15 días"       color="#a855f7" />
             </div>
 
@@ -436,7 +430,7 @@ export default function LicensesGantt({ employees }) {
                     <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         <div style={{ width: '230px' }}>
                             <SearchableSelect
-                                options={employeeOptions}
+                                options={finEmployeeOptions}
                                 value={finFilterEmployee}
                                 onChange={setFinFilterEmployee}
                                 placeholder="Todos los empleados"
@@ -516,7 +510,7 @@ export default function LicensesGantt({ employees }) {
             <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1rem', alignItems: 'center' }}>
                 <div style={{ width: '230px' }}>
                     <SearchableSelect
-                        options={employeeOptions}
+                        options={activeEmployeeOptions}
                         value={filterEmployee}
                         onChange={setFilterEmployee}
                         placeholder="Todos los empleados"
@@ -534,9 +528,6 @@ export default function LicensesGantt({ employees }) {
                 </button>
                 <button className="btn btn-secondary" onClick={exportPeriodoPDF} disabled={licenses.length === 0} style={{ fontSize: '0.85rem' }}>
                     📅 PDF Período
-                </button>
-                <button className="btn btn-secondary" onClick={exportActivasExcel} disabled={licenses.length === 0} style={{ fontSize: '0.85rem' }}>
-                    📥 Excel
                 </button>
                 <button
                     onClick={() => { setEditingLicense(null); setShowForm(true); }}

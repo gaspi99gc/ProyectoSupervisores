@@ -11,6 +11,8 @@ const LICENSE_TYPES = [
     { value: 'psiquiatrica', label: 'Psiquiátrica' },
     { value: 'sin_goce',     label: 'Sin goce' },
     { value: 'estudio',      label: 'Estudio' },
+    { value: 'casamiento',   label: 'Casamiento' },
+    { value: 'fallecimiento', label: 'Fallecimiento familiar' },
 ];
 
 function normalize(s) {
