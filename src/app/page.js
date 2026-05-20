@@ -66,7 +66,7 @@ const getTrialPeriodEndDate = (employee) => {
 };
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ activeEmpCount: 0, criticalCount: 0, expiringTrialCount: 0, pendingDocs: 0 });
+  const [stats, setStats] = useState({ activeEmpCount: 0, criticalCount: 0, expiringTrialCount: 0, totalTrialCount: 0, pendingDocs: 0 });
   const [recentTrials, setRecentTrials] = useState([]);
   const [activeSupervisors, setActiveSupervisors] = useState([]);
   const router = useRouter();
@@ -123,6 +123,14 @@ export default function Dashboard() {
           return diff >= 0 && diff <= 21;
         });
 
+        // All active employees currently within their trial period
+        const today = new Date();
+        const totalTrials = employees.filter(e => {
+          if (e.estado_empleado !== 'Activo' || !e.fecha_ingreso) return false;
+          const trialEndDate = getTrialPeriodEndDate(e);
+          return trialEndDate && trialEndDate >= today;
+        });
+
         // Top 5 sorted by trial expiration
         const sortedTrials = [...employees.filter(e => e.estado_empleado === 'Activo' && e.fecha_ingreso)]
           .sort((a, b) => getTrialPeriodEndDate(a) - getTrialPeriodEndDate(b))
@@ -132,13 +140,14 @@ export default function Dashboard() {
           activeEmpCount,
           criticalCount: 0, // Placeholder for docs
           expiringTrialCount: expiringTrials.length,
+          totalTrialCount: totalTrials.length,
           pendingDocs: 0
         });
 
         setRecentTrials(sortedTrials);
 
       } catch (e) {
-        setStats({ activeEmpCount: 0, criticalCount: 0, expiringTrialCount: 0, pendingDocs: 0 });
+        setStats({ activeEmpCount: 0, criticalCount: 0, expiringTrialCount: 0, totalTrialCount: 0, pendingDocs: 0 });
         setRecentTrials([]);
         console.error('Error loading dashboard data', e);
       }
@@ -176,9 +185,9 @@ export default function Dashboard() {
             <div className="trend up">Operacion estable</div>
           </div>
           <div className="metric-card">
-            <label><span className="metric-icon"><DashboardIcon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></DashboardIcon></span>Vencimientos de prueba</label>
-            <div className="value">{stats.expiringTrialCount}</div>
-            <div className="trend down">Control en 21 dias</div>
+            <label><span className="metric-icon"><DashboardIcon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></DashboardIcon></span>Periodos de prueba</label>
+            <div className="value">{stats.totalTrialCount}</div>
+            <div className="trend up">Personal en prueba</div>
           </div>
           <div className="metric-card">
             <label><span className="metric-icon"><DashboardIcon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></DashboardIcon></span>Chambeando ahora</label>
